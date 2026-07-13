@@ -7,7 +7,8 @@
 [![Live Demo](https://img.shields.io/badge/demo-live-brightgreen.svg)](https://lionelresnik.github.io/mission-control/)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue.svg)](https://typescriptlang.org)
-[![MCP](https://img.shields.io/badge/MCP-Cursor_native-purple.svg)](https://modelcontextprotocol.io)
+[![MCP](https://img.shields.io/badge/MCP-optional-purple.svg)](https://modelcontextprotocol.io)
+[![AI](https://img.shields.io/badge/AI-built--in_or_Cursor-blue.svg)]()
 
 ---
 
@@ -23,16 +24,21 @@ Built from the local `demo` branch (static export + sample workspace). The full 
 
 ## What is this?
 
-Mission Control is a **local-first mission dashboard** for engineers who orchestrate AI agent crews in Cursor (or via built-in providers). **Default: Cursor mode** — configure crews and roles here, run missions from Cursor chat; Mission Control persists artifacts, progress, and knowledge.
+Mission Control is a **local-first mission dashboard** for orchestrating AI agent crews. Run missions **two ways**:
+
+- **Built-in AI** — Mission Control calls Anthropic, OpenAI, or Gemini directly (web UI streaming)
+- **Cursor mode** (default) — configure crews here, execute roles from Cursor chat via MCP; Mission Control persists artifacts, progress, and knowledge
+
+Both modes share the same SQLite DB, crews, roles, workspaces, and knowledge base.
 
 It gives you:
 
-- A **mission system** — define a goal, assign a crew of AI roles, run them sequentially or in parallel with live streaming output
+- A **mission system** — define a goal, assign a crew, run roles sequentially (built-in AI with live streaming, or Cursor mode via MCP)
 - A **knowledge base** — capture architecture decisions, connection patterns, runbooks, and assumptions from every mission run. Semantic search via OpenAI embeddings.
 - **Crews & Roles** — compose teams of AI agents (Architect, Backend Engineer, QA, Security Analyst…) each with their own system prompt, tools, and behavior
 - **Workspaces** — group multiple projects/repos into a workspace; run missions scoped to an entire workspace for multi-repo tasks
 - An **ambient assistant `@lu`** — type `@lu status` in Cursor to see what's running right now, `@lu todo add`, `@lu search <query>` and more
-- A **native MCP server** — connects directly to Cursor. Ask "what missions are active?" or "search knowledge for auth" without leaving the IDE
+- An **optional MCP server** — connect Cursor for chat-driven missions, status, and knowledge search (not required for built-in AI mode)
 - **MCP integrations** — fires GitHub PRs, Jira comments, and Slack notifications on mission complete
 - Full **import/export** compatible with v1 CLI YAML files
 
@@ -98,7 +104,7 @@ mission-control/
 │   │       ├── git/worktrees.ts    # Git worktree management per mission role
 │   │       └── mcp/client.ts       # GitHub / Jira / Slack MCP integrations
 │   └── package.json
-├── mcp/                        # Native MCP server for Cursor integration
+├── mcp/                        # Optional MCP server (Cursor integration)
 │   ├── src/index.ts                # 10 MCP tools (status, missions, KB, todos…)
 │   └── package.json
 ├── cursor/
@@ -116,11 +122,11 @@ mission-control/
 | Frontend | Next.js 16, React 19, TypeScript |
 | Styling | Tailwind CSS, shadcn/ui |
 | Database | SQLite via Drizzle ORM (local, zero-config) |
-| AI | Vercel AI SDK — Anthropic Claude, OpenAI, Gemini, Ollama |
+| AI execution | Built-in: Vercel AI SDK (Anthropic, OpenAI, Gemini, Ollama). Optional: Cursor via MCP |
 | Semantic search | OpenAI `text-embedding-3-small` + cosine similarity |
-| Streaming | Server-Sent Events (SSE) |
+| Streaming | Server-Sent Events (SSE) — built-in AI mode |
 | Integrations | GitHub REST API, Jira REST API, Slack Web API |
-| Cursor native | MCP server (`@modelcontextprotocol/sdk`, stdio transport) |
+| IDE (optional) | MCP server (`@modelcontextprotocol/sdk`, stdio transport) |
 
 ---
 
@@ -356,8 +362,8 @@ Use **Settings → Import** to load these files into Mission Control.
 
 ## Roadmap
 
-- [x] Native MCP server — Cursor-native tool integration ✅
-- [x] Full mission lifecycle from Cursor chat (create, run, answer questions) ✅
+- [x] Dual execution — built-in AI (web UI) + optional Cursor MCP ✅
+- [x] Mission lifecycle — create, run, answer questions (built-in or Cursor) ✅
 - [x] Export to clipboard / import from v1 files ✅
 - [x] Workspaces — group repos, multi-repo missions ✅
 - [x] `mc_open` — auto-detect git repo in Cursor and open/create project ✅

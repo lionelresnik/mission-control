@@ -1,7 +1,7 @@
 {
   "name": "mission-control-mcp",
   "version": "1.0.0",
-  "description": "MCP server for Mission Control — exposes missions, knowledge, todos, and projects as Cursor tools",
+  "description": "MCP server for Mission Control — missions, knowledge, todos (optional Cursor integration; app also runs built-in AI)",
   "main": "dist/index.js",
   "bin": {
     "mc-mcp": "dist/index.js"
