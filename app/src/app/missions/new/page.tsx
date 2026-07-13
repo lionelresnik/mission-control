@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { apiFetch } from "@/lib/api-client"
 
 type AgentBehavior = "assume_and_document" | "ask_me" | "async"
 
@@ -49,9 +50,9 @@ export default function NewMissionPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/projects").then(r => r.json()),
-      fetch("/api/workspaces").then(r => r.json()),
-      fetch("/api/crews").then(r => r.json()),
+      apiFetch("/api/projects").then(r => r.json()),
+      apiFetch("/api/workspaces").then(r => r.json()),
+      apiFetch("/api/crews").then(r => r.json()),
     ]).then(([p, w, t]) => { setProjects(p); setWorkspaces(w); setTeams(t) })
   }, [])
 
@@ -86,7 +87,7 @@ export default function NewMissionPage() {
 
       const workspaceProjectIds = workspaceProjects.map(p => p.id)
 
-      const res = await fetch("/api/missions", {
+      const res = await apiFetch("/api/missions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

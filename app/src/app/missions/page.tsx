@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { apiFetch } from "@/lib/api-client"
 
 
 type MissionStatus = "pending" | "planning" | "running" | "paused" | "review" | "done" | "failed"
@@ -81,9 +82,9 @@ export default function MissionsPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/missions").then(r => r.json()),
-      fetch("/api/projects").then(r => r.json()),
-      fetch("/api/workspaces").then(r => r.json()),
+      apiFetch("/api/missions").then(r => r.json()),
+      apiFetch("/api/projects").then(r => r.json()),
+      apiFetch("/api/workspaces").then(r => r.json()),
     ]).then(([m, p, w]) => {
       setMissions(m)
       setProjects(p)

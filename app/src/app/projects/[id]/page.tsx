@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+import { apiFetch } from "@/lib/api-client"
 
 interface Project {
   id: string
@@ -97,8 +98,8 @@ export default function ProjectDetailPage() {
   const loadData = useCallback(async () => {
     setLoading(true)
     const [projRes, agentsRes] = await Promise.all([
-      fetch(`/api/projects/${params.id}`),
-      fetch(`/api/projects/${params.id}/agents-md`),
+      apiFetch(`/api/projects/${params.id}`),
+      apiFetch(`/api/projects/${params.id}/agents-md`),
     ])
     if (projRes.ok) setProject(await projRes.json())
     if (agentsRes.ok) {
@@ -114,7 +115,7 @@ export default function ProjectDetailPage() {
 
   async function handleSave() {
     setSaveState("saving")
-    const res = await fetch(`/api/projects/${params.id}/agents-md`, {
+    const res = await apiFetch(`/api/projects/${params.id}/agents-md`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content }),
@@ -163,7 +164,7 @@ export default function ProjectDetailPage() {
 
   async function handleSettingsSave() {
     setSettingsSaveState("saving")
-    const res = await fetch(`/api/projects/${params.id}`, {
+    const res = await apiFetch(`/api/projects/${params.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(settingsForm),

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { apiFetch } from "@/lib/api-client"
 
 const iconMap: Record<string, React.ReactNode> = {
   Layers:   <Layers className="h-5 w-5" />,
@@ -78,7 +79,7 @@ export default function RolesPage() {
   const [cursorMode, setCursorMode] = useState(true)
 
   const load = async () => {
-    const data = await fetch("/api/roles").then(r => r.json())
+    const data = await apiFetch("/api/roles").then(r => r.json())
     setRoles(data)
     setLoading(false)
   }
@@ -86,7 +87,7 @@ export default function RolesPage() {
   useEffect(() => { load() }, [])
 
   useEffect(() => {
-    fetch("/api/settings/execution-mode")
+    apiFetch("/api/settings/execution-mode")
       .then(r => r.json())
       .then(d => setCursorMode(d.executionMode !== "builtin"))
       .catch(() => {})
@@ -138,7 +139,7 @@ export default function RolesPage() {
     try {
       if (isNew) {
         const name = displayName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")
-        const res = await fetch("/api/roles", {
+        const res = await apiFetch("/api/roles", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name, displayName, description, systemPrompt, model, temperature: parseFloat(temperature), memoryScope, color, isBuiltIn: false, icon: "Cpu", tools: selectedTools }),
@@ -148,7 +149,7 @@ export default function RolesPage() {
         setSaved(true)
         setTimeout(() => { setSaved(false); closeEdit() }, 800)
       } else {
-        const res = await fetch(`/api/roles/${editing.id}`, {
+        const res = await apiFetch(`/api/roles/${editing.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ displayName, description, systemPrompt, model, temperature: parseFloat(temperature), memoryScope, color, tools: selectedTools }),

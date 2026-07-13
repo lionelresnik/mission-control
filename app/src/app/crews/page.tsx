@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { cn } from "@/lib/utils"
+import { apiFetch } from "@/lib/api-client"
 
 type Role = {
   id: string; name: string; displayName: string
@@ -57,8 +58,8 @@ export default function CrewsPage() {
 
   const load = useCallback(async () => {
     const [t, r] = await Promise.all([
-      fetch("/api/teams").then(d => d.json()),
-      fetch("/api/roles").then(d => d.json()),
+      apiFetch("/api/teams").then(d => d.json()),
+      apiFetch("/api/roles").then(d => d.json()),
     ])
     setTeams(Array.isArray(t) ? t : [])
     setRoles(Array.isArray(r) ? r : [])
@@ -100,7 +101,7 @@ export default function CrewsPage() {
     }
     try {
       if (showNew) {
-        const res = await fetch("/api/teams", {
+        const res = await apiFetch("/api/teams", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -108,7 +109,7 @@ export default function CrewsPage() {
         const created = await res.json()
         setTeams(prev => [...prev, created])
       } else if (editingId) {
-        const res = await fetch(`/api/teams/${editingId}`, {
+        const res = await apiFetch(`/api/teams/${editingId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -124,7 +125,7 @@ export default function CrewsPage() {
   }
 
   async function handleDelete(id: string) {
-    await fetch(`/api/teams/${id}`, { method: "DELETE" })
+    await apiFetch(`/api/teams/${id}`, { method: "DELETE" })
     setTeams(prev => prev.filter(t => t.id !== id))
     setDeleteTarget(null)
   }

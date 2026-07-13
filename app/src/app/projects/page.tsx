@@ -1,10 +1,12 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Plus, GitBranch, ExternalLink, Brain, FileText } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { getProjects } from "@/lib/db/queries"
-import { getKnowledgeEntries } from "@/lib/db/queries"
+import { apiFetch } from "@/lib/api-client"
 
 const agentsMdBadge: Record<string, { label: string; variant: "success" | "warning" | "secondary" }> = {
   merged:   { label: "AGENTS.md ✓ in repo", variant: "success" },
@@ -12,9 +14,25 @@ const agentsMdBadge: Record<string, { label: string; variant: "success" | "warni
   local:    { label: "AGENTS.md local only", variant: "secondary" },
 }
 
-export default async function ProjectsPage() {
-  const projects = await getProjects()
-  const allKnowledge = await getKnowledgeEntries()
+export default function ProjectsPage() {
+  const [projects, setProjects] = useState<any[]>([])
+  const [allKnowledge, setAllKnowledge] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      apiFetch("/api/projects").then(r => r.json()),
+      apiFetch("/api/knowledge").then(r => r.json()),
+    ]).then(([p, k]) => {
+      setProjects(p)
+      setAllKnowledge(k)
+      setLoading(false)
+    })
+  }, [])
+
+  if (loading) {
+    return <div className="p-6 text-sm text-muted-foreground">Loading…</div>
+  }
 
   const knowledgeCountByProject = allKnowledge.reduce<Record<string, number>>((acc, k) => {
     if (k.projectId) acc[k.projectId] = (acc[k.projectId] ?? 0) + 1

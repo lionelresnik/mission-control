@@ -1,3 +1,6 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import {
   Crosshair, Plus, CheckCircle2, Clock, AlertCircle, Brain,
@@ -8,11 +11,13 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-import { getMissions, getKnowledgeEntries, getTodos, getProjects, getWorkspaces } from "@/lib/db/queries"
+import { apiFetch } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 
 type TaskNode = { id: string; roleName: string; status: string }
 type MissionStatus = "pending" | "planning" | "running" | "paused" | "review" | "done" | "failed"
+
+type Workspace = { id: string; name: string; color: string; projects: Array<{ id: string; name: string; color?: string | null }> }
 
 const statusConfig: Record<MissionStatus, { label: string; variant: string; color: string }> = {
   pending:  { label: "Pending",  variant: "secondary",    color: "text-muted-foreground" },
@@ -24,14 +29,34 @@ const statusConfig: Record<MissionStatus, { label: string; variant: string; colo
   failed:   { label: "Failed",   variant: "destructive",  color: "text-red-400" },
 }
 
-export default async function DashboardPage() {
-  const [missions, knowledge, todos, projects, workspaces] = await Promise.all([
-    getMissions(),
-    getKnowledgeEntries(),
-    getTodos(),
-    getProjects(),
-    getWorkspaces(),
-  ])
+export default function DashboardPage() {
+  const [missions, setMissions] = useState<any[]>([])
+  const [knowledge, setKnowledge] = useState<any[]>([])
+  const [todos, setTodos] = useState<any[]>([])
+  const [projects, setProjects] = useState<any[]>([])
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      apiFetch("/api/missions").then(r => r.json()),
+      apiFetch("/api/knowledge").then(r => r.json()),
+      apiFetch("/api/todos").then(r => r.json()),
+      apiFetch("/api/projects").then(r => r.json()),
+      apiFetch("/api/workspaces").then(r => r.json()),
+    ]).then(([m, k, t, p, w]) => {
+      setMissions(m)
+      setKnowledge(k)
+      setTodos(t)
+      setProjects(p)
+      setWorkspaces(w)
+      setLoading(false)
+    })
+  }, [])
+
+  if (loading) {
+    return <div className="p-6 text-sm text-muted-foreground">Loading…</div>
+  }
 
   const running   = missions.filter(m => m.status === "running")
   const active    = missions.filter(m => m.status !== "done" && m.status !== "failed")

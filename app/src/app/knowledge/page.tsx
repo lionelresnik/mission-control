@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { apiFetch } from "@/lib/api-client"
 
 type KnowledgeType = "architecture" | "pattern" | "adr" | "standard" | "database" | "infrastructure" | "logs" | "services" | "runbook" | "other"
 type Confidence = "confirmed" | "assumed" | "investigating"
@@ -269,9 +270,9 @@ export default function KnowledgePage() {
 
   const load = useCallback(async () => {
     const [e, p, w] = await Promise.all([
-      fetch("/api/knowledge").then(r => r.json()),
-      fetch("/api/projects").then(r => r.json()),
-      fetch("/api/workspaces").then(r => r.json()),
+      apiFetch("/api/knowledge").then(r => r.json()),
+      apiFetch("/api/projects").then(r => r.json()),
+      apiFetch("/api/workspaces").then(r => r.json()),
     ])
     setEntries(e)
     setProjects(p)
@@ -286,7 +287,7 @@ export default function KnowledgePage() {
 
   // Load embed status once
   useEffect(() => {
-    fetch("/api/knowledge/embed").then(r => r.json()).then(setEmbedStatus).catch(() => {})
+    apiFetch("/api/knowledge/embed").then(r => r.json()).then(setEmbedStatus).catch(() => {})
   }, [entries.length])
 
   // Semantic search debounce
@@ -296,7 +297,7 @@ export default function KnowledgePage() {
     searchDebounce.current = setTimeout(async () => {
       setSemanticLoading(true)
       try {
-        const res = await fetch("/api/knowledge/search", {
+        const res = await apiFetch("/api/knowledge/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query: search }),
@@ -312,7 +313,7 @@ export default function KnowledgePage() {
   async function handleEmbedAll() {
     setEmbedding(true)
     try {
-      const res = await fetch("/api/knowledge/embed", { method: "POST" })
+      const res = await apiFetch("/api/knowledge/embed", { method: "POST" })
       const data = await res.json()
       setEmbedStatus(prev => prev ? { ...prev, embedded: prev.total, missing: 0 } : prev)
       alert(`Embedded ${data.embedded} entries${data.failed ? ` (${data.failed} failed — check OpenAI key)` : ""}`)
@@ -371,7 +372,7 @@ export default function KnowledgePage() {
     setSaving(true)
     try {
       const tags = newTags.split(/[,\s]+/).map(t => t.trim().replace(/^#/, "")).filter(Boolean)
-      await fetch("/api/knowledge", {
+      await apiFetch("/api/knowledge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -405,7 +406,7 @@ export default function KnowledgePage() {
     setEditSaving(true)
     const tags = editTags.split(/[,\s]+/).map(t => t.trim().replace(/^#/, "")).filter(Boolean)
     try {
-      await fetch(`/api/knowledge/${id}`, {
+      await apiFetch(`/api/knowledge/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: editTitle, content: editContent, type: editType, confidence: editConfidence, tags }),
@@ -421,14 +422,14 @@ export default function KnowledgePage() {
   }
 
   const handleDelete = async (id: string) => {
-    await fetch(`/api/knowledge/${id}`, { method: "DELETE" })
+    await apiFetch(`/api/knowledge/${id}`, { method: "DELETE" })
     setEntries(prev => prev.filter(e => e.id !== id))
     if (expandedId === id) setExpandedId(null)
     setDeleteTarget(null)
   }
 
   const handleConfirm = async (id: string) => {
-    await fetch(`/api/knowledge/${id}`, {
+    await apiFetch(`/api/knowledge/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ confidence: "confirmed" }),

@@ -1,0 +1,390 @@
+{
+  "projects": [
+    {
+      "id": "proj-platform-api",
+      "name": "Platform API",
+      "description": "Core backend platform and API layer",
+      "color": "#3b82f6",
+      "githubRepo": "platform-api",
+      "githubOwner": "my-org",
+      "jiraProject": "PLAT",
+      "jiraUrl": "https://my-org.atlassian.net",
+      "slackChannel": "platform-api",
+      "workspaceId": "ws-core-platform",
+      "agentsMdStatus": "merged",
+      "repoPath": null
+    },
+    {
+      "id": "proj-auth-service",
+      "name": "Auth Service",
+      "description": "Authentication and authorization service",
+      "color": "#10b981",
+      "githubRepo": "auth-service",
+      "githubOwner": "my-org",
+      "jiraProject": "AUTH",
+      "jiraUrl": "https://my-org.atlassian.net",
+      "slackChannel": "auth-service",
+      "workspaceId": "ws-core-platform",
+      "agentsMdStatus": "pr_open",
+      "repoPath": null
+    },
+    {
+      "id": "proj-billing",
+      "name": "Billing",
+      "description": "Billing and subscription management",
+      "color": "#f59e0b",
+      "githubRepo": "billing",
+      "githubOwner": "my-org",
+      "jiraProject": "BILL",
+      "jiraUrl": null,
+      "slackChannel": null,
+      "workspaceId": null,
+      "agentsMdStatus": "local",
+      "repoPath": null
+    }
+  ],
+  "workspaces": [
+    {
+      "id": "ws-core-platform",
+      "name": "Core Platform",
+      "description": "Shared backend services — API layer and authentication",
+      "color": "#6366f1",
+      "repoPaths": ["/repos/platform-api", "/repos/auth-service"],
+      "projects": [
+        { "id": "proj-platform-api", "name": "Platform API", "color": "#3b82f6", "workspaceId": "ws-core-platform" },
+        { "id": "proj-auth-service", "name": "Auth Service", "color": "#10b981", "workspaceId": "ws-core-platform" }
+      ]
+    }
+  ],
+  "missions": [
+    {
+      "id": "mission-azure-registry",
+      "name": "Add Azure Registry Support",
+      "goal": "Implement Azure Container Registry integration, matching the existing GCP and AWS patterns",
+      "projectId": "proj-platform-api",
+      "workspaceId": null,
+      "projectIds": ["proj-platform-api"],
+      "teamId": "crew-backend",
+      "ticketId": "PLAT-101",
+      "agentBehavior": "ask_me",
+      "status": "pending",
+      "progressPercent": 0,
+      "taskGraph": [
+        { "id": "t1", "roleId": "role-architect", "roleName": "Architect", "status": "pending", "dependsOn": [] },
+        { "id": "t2", "roleId": "role-backend", "roleName": "Backend", "status": "pending", "dependsOn": ["t1"] },
+        { "id": "t3", "roleId": "role-qa", "roleName": "QA", "status": "pending", "dependsOn": ["t2"] },
+        { "id": "t4", "roleId": "role-security", "roleName": "Security", "status": "pending", "dependsOn": ["t3"] }
+      ],
+      "estimatedCostUsd": 0,
+      "tokensTotal": 0,
+      "createdAt": "2026-07-10T10:00:00.000Z"
+    },
+    {
+      "id": "mission-auth-refresh",
+      "name": "Fix Auth Token Refresh",
+      "goal": "Debug and fix the JWT refresh loop causing intermittent 401s in production",
+      "projectId": "proj-auth-service",
+      "workspaceId": null,
+      "projectIds": ["proj-auth-service"],
+      "teamId": null,
+      "ticketId": "AUTH-42",
+      "agentBehavior": "assume_and_document",
+      "status": "done",
+      "progressPercent": 100,
+      "taskGraph": [
+        { "id": "t1", "roleId": "role-architect", "roleName": "Architect", "status": "done", "dependsOn": [] },
+        { "id": "t2", "roleId": "role-backend", "roleName": "Backend", "status": "done", "dependsOn": ["t1"] },
+        { "id": "t3", "roleId": "role-qa", "roleName": "QA", "status": "done", "dependsOn": ["t2"] }
+      ],
+      "estimatedCostUsd": 0.024,
+      "tokensTotal": 1842,
+      "createdAt": "2026-07-08T14:30:00.000Z"
+    },
+    {
+      "id": "mission-auth-middleware",
+      "name": "Unified Auth Middleware Rollout",
+      "goal": "Roll out shared auth middleware across Platform API and Auth Service with consistent JWT handling",
+      "projectId": "proj-platform-api",
+      "workspaceId": "ws-core-platform",
+      "projectIds": ["proj-platform-api", "proj-auth-service"],
+      "teamId": "crew-backend",
+      "ticketId": "PLAT-220",
+      "agentBehavior": "assume_and_document",
+      "status": "running",
+      "progressPercent": 35,
+      "taskGraph": [
+        { "id": "t1", "roleId": "role-architect", "roleName": "Architect", "status": "done", "dependsOn": [] },
+        { "id": "t2", "roleId": "role-backend", "roleName": "Backend", "status": "running", "dependsOn": ["t1"] },
+        { "id": "t3", "roleId": "role-qa", "roleName": "QA", "status": "pending", "dependsOn": ["t2"] }
+      ],
+      "estimatedCostUsd": 0.012,
+      "tokensTotal": 920,
+      "createdAt": "2026-07-12T09:00:00.000Z"
+    }
+  ],
+  "knowledge": [
+    {
+      "id": "kb-postgres",
+      "projectId": "proj-platform-api",
+      "workspaceId": null,
+      "type": "database",
+      "title": "Postgres — main DB connection pattern",
+      "content": "Connection via DB_HOST env var, port 5432, SSL required.",
+      "confidence": "confirmed",
+      "tags": ["postgres", "db"],
+      "sourceMissionId": null,
+      "updatedAt": "2026-07-01T00:00:00.000Z"
+    },
+    {
+      "id": "kb-events-queue",
+      "projectId": "proj-platform-api",
+      "workspaceId": null,
+      "type": "infrastructure",
+      "title": "events-queue — async processing",
+      "content": "Used by the worker service for async job processing.",
+      "confidence": "confirmed",
+      "tags": ["queue", "events"],
+      "sourceMissionId": "mission-azure-registry",
+      "updatedAt": "2026-07-05T00:00:00.000Z"
+    },
+    {
+      "id": "kb-jwt-root-cause",
+      "projectId": "proj-auth-service",
+      "workspaceId": null,
+      "type": "architecture",
+      "title": "JWT refresh loop root cause",
+      "content": "The refresh endpoint was not excluded from the auth middleware, causing an infinite 401 loop on expired tokens.",
+      "confidence": "confirmed",
+      "tags": ["jwt", "auth"],
+      "sourceMissionId": "mission-auth-refresh",
+      "updatedAt": "2026-07-08T00:00:00.000Z"
+    },
+    {
+      "id": "kb-rate-limit",
+      "projectId": "proj-auth-service",
+      "workspaceId": null,
+      "type": "architecture",
+      "title": "Rate limiting — per-tenant assumption",
+      "content": "Based on observed 429 behavior — appears to be 100 req/min per tenant. Not verified in source code.",
+      "confidence": "assumed",
+      "tags": ["rate-limiting"],
+      "sourceMissionId": null,
+      "updatedAt": "2026-07-06T00:00:00.000Z"
+    },
+    {
+      "id": "kb-log-groups",
+      "projectId": "proj-platform-api",
+      "workspaceId": null,
+      "type": "logs",
+      "title": "Log groups — service naming convention",
+      "content": "Pattern: /logs/{service-name}",
+      "confidence": "confirmed",
+      "tags": ["logs", "observability"],
+      "sourceMissionId": null,
+      "updatedAt": "2026-07-04T00:00:00.000Z"
+    },
+    {
+      "id": "kb-auth-contract",
+      "projectId": null,
+      "workspaceId": "ws-core-platform",
+      "type": "architecture",
+      "title": "Shared auth middleware contract",
+      "content": "All services in Core Platform use the same JWT validation middleware. Token issuer: auth-service. Audience claim must match service name.",
+      "confidence": "confirmed",
+      "tags": ["auth", "middleware", "workspace"],
+      "sourceMissionId": null,
+      "updatedAt": "2026-07-12T00:00:00.000Z"
+    }
+  ],
+  "teams": [
+    {
+      "id": "crew-backend",
+      "name": "Backend Crew",
+      "description": "Full backend feature development with security and QA review",
+      "leaderId": "role-architect",
+      "members": [
+        { "roleId": "role-architect", "order": 1 },
+        { "roleId": "role-backend", "order": 2 },
+        { "roleId": "role-qa", "order": 3 },
+        { "roleId": "role-security", "order": 4 }
+      ],
+      "workflow": ["plan", "implement", "test", "audit", "review"],
+      "isBuiltIn": false
+    },
+    {
+      "id": "crew-bug-hunter",
+      "name": "Bug Hunter",
+      "description": "Rapid bug investigation and fix — no ceremonies, fast loop",
+      "leaderId": "role-architect",
+      "members": [
+        { "roleId": "role-architect", "order": 1 },
+        { "roleId": "role-backend", "order": 2 },
+        { "roleId": "role-qa", "order": 3 }
+      ],
+      "workflow": ["investigate", "fix", "verify"],
+      "isBuiltIn": true
+    }
+  ],
+  "roles": [
+    {
+      "id": "role-architect",
+      "name": "architect",
+      "displayName": "Architect",
+      "description": "Plans implementation, breaks work into tasks",
+      "systemPrompt": "You are the Architect...",
+      "tools": ["read_file", "search_codebase", "read_knowledge"],
+      "model": "claude-sonnet",
+      "isBuiltIn": true,
+      "color": "#818cf8",
+      "icon": "Layers"
+    },
+    {
+      "id": "role-backend",
+      "name": "backend",
+      "displayName": "Backend Engineer",
+      "description": "Implements backend code following the architect's plan",
+      "systemPrompt": "You are the Backend Engineer...",
+      "tools": ["read_file", "write_file", "run_tests", "git"],
+      "model": "claude-sonnet",
+      "isBuiltIn": true,
+      "color": "#34d399",
+      "icon": "Code"
+    },
+    {
+      "id": "role-qa",
+      "name": "qa",
+      "displayName": "QA Engineer",
+      "description": "Reviews implementation, writes and runs tests",
+      "systemPrompt": "You are the QA Engineer...",
+      "tools": ["read_file", "run_tests"],
+      "model": "claude-sonnet",
+      "isBuiltIn": true,
+      "color": "#fb923c",
+      "icon": "TestTube"
+    },
+    {
+      "id": "role-security",
+      "name": "security",
+      "displayName": "Security Analyst",
+      "description": "Audits code for security vulnerabilities",
+      "systemPrompt": "You are the Security Analyst...",
+      "tools": ["read_file", "search_codebase"],
+      "model": "claude-sonnet",
+      "isBuiltIn": true,
+      "color": "#f87171",
+      "icon": "Shield"
+    }
+  ],
+  "todos": [
+    {
+      "id": "todo-1",
+      "content": "Review assumed rate-limiting knowledge entry",
+      "status": "pending",
+      "priority": "medium",
+      "createdAt": "2026-07-12T00:00:00.000Z"
+    },
+    {
+      "id": "todo-2",
+      "content": "Record demo video for GitHub README",
+      "status": "in_progress",
+      "priority": "low",
+      "createdAt": "2026-07-11T00:00:00.000Z"
+    }
+  ],
+  "settings": {
+    "defaultModel": "claude-sonnet",
+    "executionMode": "cursor",
+    "anthropicApiKey": "",
+    "openaiApiKey": "",
+    "geminiApiKey": ""
+  },
+  "mcpStatus": {
+    "dbExists": false,
+    "mcpBuilt": true,
+    "mcpPath": "/path/to/mission-control/mcp/dist/index.js",
+    "dbPath": "~/.mission-control/mc.db",
+    "toolCount": 21,
+    "config": "{\n  \"mcpServers\": {\n    \"mission-control\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/mission-control/mcp/dist/index.js\"]\n    }\n  }\n}"
+  },
+  "missionActivities": {
+    "mission-azure-registry": [
+      {
+        "id": "ev-1",
+        "type": "role_start",
+        "roleName": "Architect",
+        "message": "Starting architect role",
+        "createdAt": "2026-07-10T10:05:00.000Z"
+      },
+      {
+        "id": "ev-2",
+        "type": "checkpoint",
+        "roleName": "Architect",
+        "message": "Reviewed existing GCP/AWS registry patterns",
+        "createdAt": "2026-07-10T10:12:00.000Z"
+      }
+    ],
+    "mission-auth-middleware": [
+      {
+        "id": "ev-3",
+        "type": "role_done",
+        "roleName": "Architect",
+        "message": "Plan artifact saved",
+        "createdAt": "2026-07-12T10:30:00.000Z"
+      }
+    ]
+  },
+  "missionDetails": {
+    "mission-auth-middleware": {
+      "artifacts": [
+        {
+          "id": "art-1",
+          "missionId": "mission-auth-middleware",
+          "roleName": "Architect",
+          "type": "plan",
+          "title": "Auth Middleware Rollout Plan",
+          "content": "## Mission Plan\n\n### Approach\nExtract shared JWT validation into `@org/auth-middleware` package.\n\n### Tasks\n1. [Backend] Publish shared package\n2. [Backend] Integrate in Platform API\n3. [Backend] Integrate in Auth Service\n4. [QA] Cross-service integration tests",
+          "createdAt": "2026-07-12T10:00:00.000Z"
+        }
+      ],
+      "questions": [],
+      "project": { "jiraBaseUrl": "https://my-org.atlassian.net", "slackChannel": "platform-api" }
+    },
+    "mission-azure-registry": {
+      "artifacts": [],
+      "questions": [
+        {
+          "id": "q-1",
+          "question": "Should Azure registry use managed identity or service principal?",
+          "answer": null,
+          "isAssumption": false
+        }
+      ],
+      "project": { "jiraBaseUrl": "https://my-org.atlassian.net", "slackChannel": "platform-api" }
+    },
+    "mission-auth-refresh": {
+      "artifacts": [
+        {
+          "id": "art-2",
+          "missionId": "mission-auth-refresh",
+          "roleName": "Backend",
+          "type": "code",
+          "title": "JWT bypass fix",
+          "content": "Added `/refresh` to auth middleware bypass list in `auth.middleware.ts`.",
+          "createdAt": "2026-07-08T16:00:00.000Z"
+        }
+      ],
+      "questions": [],
+      "project": { "jiraBaseUrl": "https://my-org.atlassian.net", "slackChannel": "auth-service" }
+    }
+  },
+  "projectAgentsMd": {
+    "proj-platform-api": {
+      "content": "# Platform API\n\n## Overview\nCore backend API serving all platform features.\n\n## Stack\n- Node.js / TypeScript\n- Postgres\n- Redis\n\n## Key patterns\n- Repository pattern for data access\n- OpenAPI spec in `/docs`",
+      "source": "db"
+    },
+    "proj-auth-service": {
+      "content": "# Auth Service\n\n## Overview\nHandles authentication, JWT issuance, and refresh tokens.\n\n## Key endpoints\n- POST /login\n- POST /refresh\n- GET /me",
+      "source": "db"
+    }
+  }
+}

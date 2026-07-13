@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { apiFetch } from "@/lib/api-client"
 
 type Todo = {
   id: string
@@ -21,7 +22,7 @@ export default function TodosPage() {
   const [newContent, setNewContent] = useState("")
 
   const load = () =>
-    fetch("/api/todos")
+    apiFetch("/api/todos")
       .then(r => r.json())
       .then(setTodos)
       .finally(() => setLoading(false))
@@ -30,7 +31,7 @@ export default function TodosPage() {
 
   const addTodo = async () => {
     if (!newContent.trim()) return
-    await fetch("/api/todos", {
+    await apiFetch("/api/todos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: newContent.trim(), priority: "medium" }),
@@ -40,7 +41,7 @@ export default function TodosPage() {
   }
 
   const setStatus = async (id: string, status: Todo["status"]) => {
-    await fetch(`/api/todos/${id}`, {
+    await apiFetch(`/api/todos/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),

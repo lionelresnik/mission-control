@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:demo": "cp ../.github/demo/seed.json public/demo-bundle.json && mv src/app/api src/.api-stash && NEXT_PUBLIC_DEMO_MODE=true NEXT_PUBLIC_BASE_PATH=/mission-control next build; status=$?; mv src/.api-stash src/app/api; exit $status",
     "start": "next start",
     "lint": "eslint"
   },

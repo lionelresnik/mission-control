@@ -1,0 +1,7 @@
+node_modules/
+mcp/node_modules/
+mcp/dist/
+app/.next/
+app/out/
+*.db
+.DS_Store

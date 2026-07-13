@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { apiFetch } from "@/lib/api-client"
 
 type Project = {
   id: string
@@ -49,8 +50,8 @@ export default function WorkspacesPage() {
 
   const load = async () => {
     const [ws, proj] = await Promise.all([
-      fetch("/api/workspaces").then(r => r.json()),
-      fetch("/api/projects").then(r => r.json()),
+      apiFetch("/api/workspaces").then(r => r.json()),
+      apiFetch("/api/projects").then(r => r.json()),
     ])
     setWorkspaces(ws)
     setAllProjects(proj)
@@ -89,7 +90,7 @@ export default function WorkspacesPage() {
     setSaving(true)
     try {
       if (isNew) {
-        const res = await fetch("/api/workspaces", {
+        const res = await apiFetch("/api/workspaces", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name, description, color, projectIds: selectedProjectIds }),
@@ -104,7 +105,7 @@ export default function WorkspacesPage() {
         const prevIds = editing.projects.map(p => p.id)
         const addProjectIds = selectedProjectIds.filter(id => !prevIds.includes(id))
         const removeProjectIds = prevIds.filter(id => !selectedProjectIds.includes(id))
-        await fetch(`/api/workspaces/${editing.id}`, {
+        await apiFetch(`/api/workspaces/${editing.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name, description, color, addProjectIds, removeProjectIds }),
@@ -119,7 +120,7 @@ export default function WorkspacesPage() {
   }
 
   const handleDelete = async (ws: Workspace) => {
-    await fetch(`/api/workspaces/${ws.id}`, { method: "DELETE" })
+    await apiFetch(`/api/workspaces/${ws.id}`, { method: "DELETE" })
     setWorkspaces(prev => prev.filter(w => w.id !== ws.id))
     setAllProjects(prev => prev.map(p => p.workspaceId === ws.id ? { ...p, workspaceId: null } : p))
     if (editing?.id === ws.id) closeForm()
