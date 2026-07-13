@@ -60,6 +60,15 @@ function runMigrations(sqlite: InstanceType<typeof Database>) {
     `ALTER TABLE missions ADD COLUMN workspace_id TEXT`,
     `ALTER TABLE knowledge_entries ADD COLUMN workspace_id TEXT`,
     `ALTER TABLE missions ADD COLUMN project_ids TEXT DEFAULT '[]'`,
+    `CREATE TABLE IF NOT EXISTS mission_events (
+      id TEXT PRIMARY KEY,
+      mission_id TEXT NOT NULL REFERENCES missions(id) ON DELETE CASCADE,
+      role_id TEXT,
+      role_name TEXT,
+      type TEXT NOT NULL,
+      message TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`,
   ]
 
   for (const sql of migrations) {

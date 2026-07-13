@@ -35,7 +35,7 @@ export async function runRole(opts: RoleRunOptions): Promise<RoleRunResult> {
   let fullContent = ""
 
   const { textStream, usage } = streamText({
-    model: getModel(model),
+    model: await getModel(model),
     system: systemPrompt,
     prompt: userPrompt,
     temperature,

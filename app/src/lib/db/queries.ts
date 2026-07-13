@@ -1,6 +1,8 @@
 import { eq, desc } from "drizzle-orm"
 import { getDb, schema } from "./index"
 import { nanoid } from "nanoid"
+import { buildTaskGraphFromTeam } from "@/lib/missions/build-task-graph"
+import type { TaskGraphNode } from "@/lib/db/schema"
 
 /** Safely parse JSON — returns fallback instead of throwing */
 function safeJson<T>(value: unknown, fallback: T): T {
@@ -78,6 +80,11 @@ export async function createMission(data: {
     throw new Error("projectId, projectIds, or workspaceId required")
   }
 
+  let taskGraph: TaskGraphNode[] = []
+  if (data.teamId) {
+    taskGraph = await buildTaskGraphFromTeam(data.teamId)
+  }
+
   await getDb().insert(missions).values({
     id,
     name: data.name || data.goal.slice(0, 60),
@@ -89,6 +96,8 @@ export async function createMission(data: {
     ticketId: data.ticketId,
     agentBehavior: data.agentBehavior ?? "assume_and_document",
     status: "pending",
+    taskGraph,
+    progressPercent: 0,
   })
   return getMission(id)
 }
@@ -243,6 +252,17 @@ export async function updateTeam(id: string, data: Partial<typeof teams.$inferIn
   await getDb().update(teams).set(data).where(eq(teams.id, id))
   const rows = await getDb().select().from(teams).where(eq(teams.id, id))
   return rows[0]
+}
+
+export async function updateTodo(id: string, data: Partial<typeof todos.$inferInsert>) {
+  await getDb().update(todos).set(data).where(eq(todos.id, id))
+  const rows = await getDb().select().from(todos).where(eq(todos.id, id))
+  return rows[0]
+}
+
+export async function getTeam(id: string) {
+  const rows = await getDb().select().from(teams).where(eq(teams.id, id))
+  return rows[0] ?? null
 }
 
 export async function deleteTeam(id: string) {

@@ -75,6 +75,7 @@ export default function RolesPage() {
   const [memoryScope, setMemoryScope] = useState("")
   const [color, setColor] = useState("#6b7280")
   const [selectedTools, setSelectedTools] = useState<string[]>([])
+  const [cursorMode, setCursorMode] = useState(true)
 
   const load = async () => {
     const data = await fetch("/api/roles").then(r => r.json())
@@ -83,6 +84,13 @@ export default function RolesPage() {
   }
 
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    fetch("/api/settings/execution-mode")
+      .then(r => r.json())
+      .then(d => setCursorMode(d.executionMode !== "builtin"))
+      .catch(() => {})
+  }, [])
 
   const openEdit = (role: Role) => {
     setEditing(role)
@@ -214,10 +222,16 @@ export default function RolesPage() {
                     </div>
 
                     <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>Model: <span className="text-foreground">{role.model ?? "claude-sonnet"}</span></span>
-                      <span>·</span>
-                      <span>Temp: <span className="text-foreground">{role.temperature ?? 0.7}</span></span>
-                      <span>·</span>
+                      {!cursorMode && (
+                        <>
+                          <span>Model: <span className="text-foreground">{role.model ?? "claude-sonnet"}</span></span>
+                          <span>·</span>
+                          <span>Temp: <span className="text-foreground">{role.temperature ?? 0.7}</span></span>
+                          <span>·</span>
+                        </>
+                      )}
+                      {cursorMode && <span>Runs in Cursor</span>}
+                      {cursorMode && <span>·</span>}
                       <span>{tools.length} tools</span>
                       <span>·</span>
                       <span className="capitalize">{role.memoryScope ?? "mission"} memory</span>
@@ -287,6 +301,7 @@ export default function RolesPage() {
               />
             </div>
 
+            {!cursorMode && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Model</label>
@@ -307,6 +322,7 @@ export default function RolesPage() {
                 />
               </div>
             </div>
+            )}
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">Memory scope</label>

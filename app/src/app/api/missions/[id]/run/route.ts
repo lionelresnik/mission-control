@@ -6,6 +6,17 @@ import { getDb, schema } from "@/lib/db"
 import { eq } from "drizzle-orm"
 import { createWorktree } from "@/lib/git/worktrees"
 import { slackPostMissionSummary, jiraAddComment } from "@/lib/mcp/client"
+import { buildRolePrompts } from "@/lib/missions/build-prompt"
+import { detectArtifactType } from "@/lib/missions/artifact-type"
+import {
+  allTasksComplete,
+  calcProgress,
+  findNextPendingTask,
+  markTaskDone,
+  markTaskRunning,
+} from "@/lib/missions/task-graph-utils"
+import { requireBuiltinMode } from "@/lib/settings/builtin-guard"
+import type { TaskGraphNode } from "@/lib/db/schema"
 
 /**
  * POST /api/missions/[id]/run
@@ -20,6 +31,9 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const blocked = await requireBuiltinMode()
+  if (blocked) return blocked
+
   const { id } = await params
   const mission = await getMission(id)
   if (!mission) {
@@ -37,20 +51,11 @@ export async function POST(
 
       try {
         // Find the next pending role in the task graph
-        const taskGraph = (mission.taskGraph ?? []) as {
-          id: string; roleId: string; roleName: string
-          status: "pending" | "running" | "done" | "failed" | "skipped"
-          dependsOn: string[]
-        }[]
-
-        // Determine runnable tasks: pending + all dependencies done
-        const doneIds = new Set(taskGraph.filter(t => t.status === "done").map(t => t.id))
-        const nextTask = taskGraph.find(
-          t => t.status === "pending" && t.dependsOn.every(d => doneIds.has(d))
-        )
+        const taskGraph = (mission.taskGraph ?? []) as TaskGraphNode[]
+        const nextTask = findNextPendingTask(taskGraph)
 
         if (!nextTask) {
-          const allDone = taskGraph.every(t => t.status === "done")
+          const allDone = allTasksComplete(taskGraph)
           if (allDone) {
             await updateMission(id, { status: "done", progressPercent: 100, completedAt: new Date().toISOString() })
             send("mission_done", { message: "All roles completed. Mission done." })
@@ -62,11 +67,8 @@ export async function POST(
         }
 
         // Mark task as running
-        const updatedGraph = taskGraph.map(t =>
-          t.id === nextTask.id ? { ...t, status: "running" as const, startedAt: new Date().toISOString() } : t
-        )
-        const doneCount = taskGraph.filter(t => t.status === "done").length
-        const progressPercent = Math.round((doneCount / taskGraph.length) * 100)
+        const updatedGraph = markTaskRunning(taskGraph, nextTask.id)
+        const progressPercent = calcProgress(updatedGraph)
 
         await updateMission(id, {
           status: "running",
@@ -104,49 +106,24 @@ export async function POST(
         const model = (role?.model ?? "claude-sonnet") as string
         const temperature = role?.temperature ?? 0.7
 
-        // Build context from knowledge base
-        const knowledge = await getKnowledgeEntries(mission.projectId ?? undefined)
-        const knowledgeContext = knowledge.length > 0
-          ? `\n\n## Project Knowledge Base\n${knowledge.slice(0, 10).map(k => `### ${k.title}\n${k.content}`).join("\n\n")}`
-          : ""
+        const project = mission.projectId ? await getProject(mission.projectId) : null
+        const prompts = await buildRolePrompts(
+          mission,
+          nextTask,
+          { systemPrompt, name: role?.name },
+          project?.agentsMdLocal
+        )
 
-        // Previous artifacts as context
-        const { getMissionArtifacts } = await import("@/lib/db/queries")
-        const prevArtifacts = await getMissionArtifacts(id)
-        const artifactContext = prevArtifacts.length > 0
-          ? `\n\n## Previous Work\n${prevArtifacts.map(a => `### ${a.roleName ?? a.roleId} — ${a.type}\n${a.content}`).join("\n\n")}`
-          : ""
+        const result = streamText({
+          model: await getModel(model),
+          system: prompts.systemPrompt,
+          prompt: prompts.userPrompt,
+          temperature,
+        })
 
-        const userPrompt = `# Mission: ${mission.name}
-
-## Goal
-${mission.goal}
-
-## Your role
-You are the **${nextTask.roleName}**. Execute your part of this mission now.
-${knowledgeContext}
-${artifactContext}
-
-${mission.agentBehavior === "assume_and_document"
-  ? "When uncertain, make a clear assumption and document it. Do NOT ask questions — keep moving."
-  : mission.agentBehavior === "ask_me"
-  ? "If you have blocking questions (max 3), state them clearly prefixed with 'QUESTION:'. Then continue with your best assumption."
-  : "Log any open questions at the end prefixed with 'ASYNC_QUESTION:'. Continue without blocking."
-}
-
-Produce a complete, high-quality artifact for your role now.`
-
-        // Stream the AI response
         let fullContent = ""
         let tokensIn = 0
         let tokensOut = 0
-
-        const result = streamText({
-          model: getModel(model),
-          system: systemPrompt,
-          prompt: userPrompt,
-          temperature,
-        })
 
         for await (const chunk of result.textStream) {
           fullContent += chunk
@@ -184,11 +161,7 @@ Produce a complete, high-quality artifact for your role now.`
         }
 
         // Save artifact
-        const artifactType =
-          nextTask.roleName.toLowerCase().includes("architect") ? "plan"
-          : nextTask.roleName.toLowerCase().includes("qa") ? "review"
-          : nextTask.roleName.toLowerCase().includes("security") ? "findings"
-          : "code"
+        const artifactType = detectArtifactType(nextTask.roleName, role?.name)
 
         await createArtifact({
           missionId: id,
@@ -200,12 +173,9 @@ Produce a complete, high-quality artifact for your role now.`
         })
 
         // Mark task done
-        const finalGraph = updatedGraph.map(t =>
-          t.id === nextTask.id ? { ...t, status: "done" as const, completedAt: new Date().toISOString() } : t
-        )
-        const newDoneCount = finalGraph.filter(t => t.status === "done").length
-        const newProgress = Math.round((newDoneCount / finalGraph.length) * 100)
-        const allComplete = finalGraph.every(t => t.status === "done")
+        const finalGraph = markTaskDone(updatedGraph, nextTask.id)
+        const newProgress = calcProgress(finalGraph)
+        const allComplete = allTasksComplete(finalGraph)
 
         // Accumulate token totals onto mission
         const currentMission = await getMission(id)

@@ -158,6 +158,7 @@ export default function SettingsPage() {
 
       {/* AI Providers — built-in mode only */}
       {!cursorMode && (
+      <>
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -211,6 +212,7 @@ export default function SettingsPage() {
           />
         </CardContent>
       </Card>
+      </>
       )}
 
       {/* Integrations — GitHub, Jira, Slack */}

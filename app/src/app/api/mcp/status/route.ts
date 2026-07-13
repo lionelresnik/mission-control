@@ -26,6 +26,6 @@ export async function GET() {
     mcpPath,
     dbPath: DB_PATH,
     config,
-    toolCount: 19,
+    toolCount: 24,
   })
 }

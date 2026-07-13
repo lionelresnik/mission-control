@@ -12,6 +12,7 @@ import {
   UserCog,
   Crosshair,
   Brain,
+  ListTodo,
   Settings,
   Sun,
   Moon,
@@ -27,6 +28,7 @@ const nav = [
   { href: "/crews", label: "Crews", icon: UsersRound },
   { href: "/roles", label: "Roles", icon: UserCog },
   { href: "/missions", label: "Missions", icon: Crosshair },
+  { href: "/todos", label: "Todos", icon: ListTodo },
   { href: "/knowledge", label: "Knowledge", icon: Brain },
 ]
 

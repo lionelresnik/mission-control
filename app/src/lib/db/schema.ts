@@ -188,6 +188,22 @@ export const missionQuestions = sqliteTable("mission_questions", {
   answeredAt: text("answered_at"),
 })
 
+// ─── Mission events (Cursor mode activity feed) ─────────────────────────────
+
+export const missionEvents = sqliteTable("mission_events", {
+  id: text("id").primaryKey(),
+  missionId: text("mission_id")
+    .notNull()
+    .references(() => missions.id, { onDelete: "cascade" }),
+  roleId: text("role_id"),
+  roleName: text("role_name"),
+  type: text("type", {
+    enum: ["role_start", "checkpoint", "role_done", "mission_done"],
+  }).notNull(),
+  message: text("message"),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+})
+
 // ─── Daily Log ───────────────────────────────────────────────────────────────
 
 export const dailyLogs = sqliteTable("daily_logs", {

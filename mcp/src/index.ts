@@ -38,6 +38,29 @@ function parseJson<T>(val: unknown, fallback: T): T {
   return val as T
 }
 
+function readExecutionMode(db: Database.Database): "cursor" | "builtin" {
+  const row = db.prepare(`SELECT value FROM settings WHERE key = 'executionMode'`).get() as { value?: unknown } | undefined
+  const raw = row?.value
+  if (raw == null) return "cursor"
+  const str = typeof raw === "string" ? (() => { try { return JSON.parse(raw) as string } catch { return raw } })() : String(raw)
+  return str === "builtin" ? "builtin" : "cursor"
+}
+
+async function mcFetch(appUrl: string, path: string, init?: RequestInit) {
+  const res = await fetch(`${appUrl}${path}`, init)
+  const data = await res.json() as Record<string, unknown>
+  if (!res.ok) throw new Error(String(data.error ?? res.statusText))
+  return data
+}
+
+async function cursorModeBlocked(db: Database.Database, appUrl: string): Promise<string | null> {
+  const mode = readExecutionMode(db)
+  if (mode === "cursor") {
+    return `Built-in AI tools are disabled in Cursor mode.\nUse mc_get_next_role → mc_role_start → mc_complete_role instead.\nOr switch to Built-in AI in Settings: ${appUrl}/settings`
+  }
+  return null
+}
+
 // ─── Server ──────────────────────────────────────────────────────────────────
 
 const server = new McpServer({
@@ -754,6 +777,326 @@ server.tool(
   }
 )
 
+// ─── Tool: mc_list_crews ──────────────────────────────────────────────────────
+
+server.tool(
+  "mc_list_crews",
+  "List all crews with their roles in execution order.",
+  {},
+  async () => {
+    const db = getDb()
+    try {
+      const crews = db.prepare(`SELECT id, name, description, members FROM teams ORDER BY name`).all() as Array<{
+        id: string; name: string; description: string | null; members: string | null
+      }>
+      const roles = db.prepare(`SELECT id, name, display_name FROM roles`).all() as Array<{
+        id: string; name: string; display_name: string
+      }>
+      const roleMap = Object.fromEntries(roles.map(r => [r.id, r.display_name ?? r.name]))
+
+      if (crews.length === 0) {
+        return { content: [{ type: "text", text: "No crews yet. Create one in the web UI." }] }
+      }
+
+      const lines = crews.map(c => {
+        const members = parseJson<Array<{ roleId: string; order: number }>>(c.members, [])
+          .sort((a, b) => a.order - b.order)
+        return [
+          `### ${c.name} \`${c.id}\``,
+          c.description ?? "",
+          members.length === 0
+            ? "_No roles_"
+            : members.map((m, i) => `${i + 1}. ${roleMap[m.roleId] ?? m.roleId}`).join("\n"),
+        ].filter(Boolean).join("\n")
+      })
+
+      return { content: [{ type: "text", text: `# Crews (${crews.length})\n\n` + lines.join("\n\n---\n\n") }] }
+    } finally {
+      db.close()
+    }
+  }
+)
+
+// ─── Tool: mc_get_next_role ───────────────────────────────────────────────────
+
+server.tool(
+  "mc_get_next_role",
+  "Get the next pending role package for Cursor execution: system prompt, user prompt, task id. Use with mc_role_start and mc_complete_role.",
+  {
+    missionId: z.string().describe("Mission ID"),
+    appUrl: z.string().optional().describe("Mission Control URL. Defaults to http://localhost:3000"),
+  },
+  async ({ missionId, appUrl = "http://localhost:3000" }) => {
+    try {
+      const res = await fetch(`${appUrl}/api/missions/${missionId}/cursor/next-role`)
+      const result = await res.json() as Record<string, unknown>
+      if (!res.ok) return { content: [{ type: "text", text: `Error: ${result.error ?? res.statusText}` }] }
+      if (result.status === "mission_done") {
+        return { content: [{ type: "text", text: "🎉 Mission complete — all roles done." }] }
+      }
+      const lines = [
+        `# Next role: **${result.roleName}**`,
+        `**Mission:** \`${missionId}\`  |  **Task:** \`${result.taskId}\`  |  **Progress:** ${result.progress}%`,
+        ``,
+        `## System prompt`,
+        String(result.systemPrompt),
+        ``,
+        `## User prompt`,
+        String(result.userPrompt),
+        ``,
+        `Workflow: mc_role_start → execute in Cursor → mc_complete_role with full output.`,
+      ]
+      return { content: [{ type: "text", text: lines.join("\n") }] }
+    } catch (err) {
+      return { content: [{ type: "text", text: `Could not reach Mission Control at ${appUrl}. Error: ${err}` }] }
+    }
+  }
+)
+
+// ─── Tool: mc_role_start ──────────────────────────────────────────────────────
+
+server.tool(
+  "mc_role_start",
+  "Mark the next (or specified) role as running in Mission Control. Call before executing the role in Cursor.",
+  {
+    missionId: z.string().describe("Mission ID"),
+    taskId: z.string().optional().describe("Task ID from mc_get_next_role. Omit to start next pending role."),
+    appUrl: z.string().optional().describe("Mission Control URL. Defaults to http://localhost:3000"),
+  },
+  async ({ missionId, taskId, appUrl = "http://localhost:3000" }) => {
+    try {
+      const res = await fetch(`${appUrl}/api/missions/${missionId}/cursor/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId }),
+      })
+      const result = await res.json() as Record<string, unknown>
+      if (!res.ok) return { content: [{ type: "text", text: `Error: ${result.error ?? res.statusText}` }] }
+      return {
+        content: [{
+          type: "text",
+          text: `▶ **${result.roleName}** is now running (${result.progress}% complete).\nExecute this role in Cursor, then call mc_complete_role.`,
+        }],
+      }
+    } catch (err) {
+      return { content: [{ type: "text", text: `Could not reach Mission Control. Error: ${err}` }] }
+    }
+  }
+)
+
+// ─── Tool: mc_role_checkpoint ─────────────────────────────────────────────────
+
+server.tool(
+  "mc_role_checkpoint",
+  "Post a short status update to Mission Control activity feed (optional, for live progress in the web UI).",
+  {
+    missionId: z.string().describe("Mission ID"),
+    message: z.string().describe("Short status message, e.g. 'Architect: drafting API schema'"),
+    roleName: z.string().optional(),
+    appUrl: z.string().optional().describe("Defaults to http://localhost:3000"),
+  },
+  async ({ missionId, message, roleName, appUrl = "http://localhost:3000" }) => {
+    try {
+      const res = await fetch(`${appUrl}/api/missions/${missionId}/cursor/checkpoint`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, roleName }),
+      })
+      const result = await res.json() as Record<string, unknown>
+      if (!res.ok) return { content: [{ type: "text", text: `Error: ${result.error ?? res.statusText}` }] }
+      return { content: [{ type: "text", text: `✓ Checkpoint saved.` }] }
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error: ${err}` }] }
+    }
+  }
+)
+
+// ─── Tool: mc_complete_role ───────────────────────────────────────────────────
+
+server.tool(
+  "mc_complete_role",
+  "Save role output as an artifact and mark the role done. Call after executing the role in Cursor.",
+  {
+    missionId: z.string().describe("Mission ID"),
+    content: z.string().describe("Full role output / artifact content"),
+    taskId: z.string().optional().describe("Task ID from mc_get_next_role"),
+    saveAssumptionsToKb: z.boolean().optional().describe("Extract ASSUMPTION: lines to knowledge base. Default true."),
+    appUrl: z.string().optional().describe("Defaults to http://localhost:3000"),
+  },
+  async ({ missionId, content, taskId, saveAssumptionsToKb, appUrl = "http://localhost:3000" }) => {
+    try {
+      const res = await fetch(`${appUrl}/api/missions/${missionId}/cursor/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, taskId, saveAssumptionsToKb }),
+      })
+      const result = await res.json() as Record<string, unknown>
+      if (!res.ok) return { content: [{ type: "text", text: `Error: ${result.error ?? res.statusText}` }] }
+      const lines = [
+        result.status === "mission_done"
+          ? `🎉 Mission complete!`
+          : `✅ **${result.roleName}** done (${result.progress}%)`,
+        result.nextRole ? `**Next role:** ${result.nextRole} — call mc_get_next_role to continue` : "",
+        `Artifact: \`${result.artifactId}\``,
+        `View: ${appUrl}/missions/${missionId}`,
+      ].filter(Boolean)
+      return { content: [{ type: "text", text: lines.join("\n") }] }
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error: ${err}` }] }
+    }
+  }
+)
+
+// ─── Tool: mc_list_crews ──────────────────────────────────────────────────────
+
+server.tool(
+  "mc_list_crews",
+  "List all crews with their roles in execution order.",
+  {},
+  async () => {
+    const db = getDb()
+    try {
+      const crews = db.prepare(`SELECT id, name, description, members FROM teams ORDER BY name`).all() as Array<{
+        id: string; name: string; description: string | null; members: string | null
+      }>
+      const roles = db.prepare(`SELECT id, name, display_name FROM roles`).all() as Array<{ id: string; name: string; display_name: string }>
+      const roleMap = Object.fromEntries(roles.map(r => [r.id, r.display_name ?? r.name]))
+
+      if (crews.length === 0) {
+        return { content: [{ type: "text", text: "No crews yet. Create one in the Mission Control web UI." }] }
+      }
+
+      const lines = crews.map(c => {
+        const members = parseJson<Array<{ roleId: string; order: number }>>(c.members, [])
+          .sort((a, b) => a.order - b.order)
+        return [
+          `### ${c.name} \`${c.id}\``,
+          c.description ?? "",
+          members.length === 0 ? "_no roles_" : members.map((m, i) => `${i + 1}. ${roleMap[m.roleId] ?? m.roleId}`).join("\n"),
+        ].filter(Boolean).join("\n")
+      })
+
+      return { content: [{ type: "text", text: `# Crews (${crews.length})\n\n` + lines.join("\n\n---\n\n") }] }
+    } finally {
+      db.close()
+    }
+  }
+)
+
+// ─── Tool: mc_get_next_role ───────────────────────────────────────────────────
+
+server.tool(
+  "mc_get_next_role",
+  "Get the next pending role for a mission with full system + user prompts. Use in Cursor mode instead of mc_run_mission.",
+  {
+    id: z.string().describe("Mission ID"),
+    appUrl: z.string().optional().describe("Mission Control URL. Defaults to http://localhost:3000"),
+  },
+  async ({ id, appUrl = "http://localhost:3000" }) => {
+    try {
+      const result = await mcFetch(appUrl, `/api/missions/${id}/cursor/next-role`)
+      if (result.status === "mission_done") {
+        return { content: [{ type: "text", text: "🎉 Mission complete — all roles done." }] }
+      }
+      const lines = [
+        `# Next role: **${result.roleName}**`,
+        `Mission: \`${id}\`  |  Task: \`${result.taskId}\`  |  Progress: ${result.progress}%`,
+        "",
+        "## System prompt",
+        "```",
+        result.systemPrompt,
+        "```",
+        "",
+        "## User prompt",
+        "```",
+        result.userPrompt,
+        "```",
+        "",
+        "When done: `mc_complete_role` with mission id and full output.",
+        "Optional: `mc_role_start` before you begin, `mc_role_checkpoint` for status updates.",
+      ]
+      return { content: [{ type: "text", text: lines.join("\n") }] }
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error: ${err}` }] }
+    }
+  }
+)
+
+server.tool(
+  "mc_role_start",
+  "Mark a mission role as running (Cursor mode). Updates the Mission Control UI.",
+  {
+    id: z.string().describe("Mission ID"),
+    taskId: z.string().optional().describe("Task ID from mc_get_next_role"),
+    appUrl: z.string().optional(),
+  },
+  async ({ id, taskId, appUrl = "http://localhost:3000" }) => {
+    try {
+      const result = await mcFetch(appUrl, `/api/missions/${id}/cursor/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId }),
+      })
+      return { content: [{ type: "text", text: `▶ **${result.roleName}** is now running (${result.progress}%)` }] }
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error: ${err}` }] }
+    }
+  }
+)
+
+server.tool(
+  "mc_role_checkpoint",
+  "Post a short status update for the current role (Cursor mode). Shows in Mission Control activity feed.",
+  {
+    id: z.string().describe("Mission ID"),
+    message: z.string().describe("Short status e.g. 'Drafting API plan…'"),
+    roleName: z.string().optional(),
+    appUrl: z.string().optional(),
+  },
+  async ({ id, message, roleName, appUrl = "http://localhost:3000" }) => {
+    try {
+      await mcFetch(appUrl, `/api/missions/${id}/cursor/checkpoint`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, roleName }),
+      })
+      return { content: [{ type: "text", text: `✓ Checkpoint saved` }] }
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error: ${err}` }] }
+    }
+  }
+)
+
+server.tool(
+  "mc_complete_role",
+  "Save role output and mark task done (Cursor mode). Replaces mc_run_mission for Cursor execution.",
+  {
+    id: z.string().describe("Mission ID"),
+    content: z.string().describe("Full role output / artifact content"),
+    taskId: z.string().optional(),
+    appUrl: z.string().optional(),
+  },
+  async ({ id, content, taskId, appUrl = "http://localhost:3000" }) => {
+    try {
+      const result = await mcFetch(appUrl, `/api/missions/${id}/cursor/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, taskId }),
+      })
+      const lines = [
+        result.status === "mission_done"
+          ? `🎉 Mission complete!`
+          : `✅ **${result.roleName}** done (${result.progress}%)`,
+        result.nextRole ? `Next role: **${result.nextRole}** — call mc_get_next_role to continue` : "",
+        `Artifact: \`${result.artifactId}\``,
+      ].filter(Boolean)
+      return { content: [{ type: "text", text: lines.join("\n") }] }
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error: ${err}` }] }
+    }
+  }
+)
+
 // ─── Tool: mc_run_mission ─────────────────────────────────────────────────────
 
 server.tool(
@@ -764,19 +1107,33 @@ server.tool(
     appUrl: z.string().optional().describe("Mission Control URL. Defaults to http://localhost:3000"),
   },
   async ({ id, appUrl = "http://localhost:3000" }) => {
-    // Check mission exists
-    if (!fs.existsSync(DB_PATH)) {
-      return { content: [{ type: "text", text: `Database not found at ${DB_PATH}` }] }
+    if (!fs.existsSync(resolveDbPath())) {
+      return { content: [{ type: "text", text: `Database not found.` }] }
     }
-    const db = new Database(DB_PATH, { readonly: true })
+    const db = new Database(resolveDbPath(), { readonly: true })
+    try {
+      if (readExecutionMode(db) === "cursor") {
+        return {
+          content: [{
+            type: "text",
+            text: `mc_run_mission is disabled in Cursor mode.\n\nUse:\n1. mc_get_next_role with mission id \`${id}\`\n2. Execute the role in Cursor\n3. mc_complete_role with the output\n\nOr switch to Built-in AI in Settings.`,
+          }],
+        }
+      }
+    } finally {
+      db.close()
+    }
+
+    // Check mission exists
+    const db2 = new Database(resolveDbPath(), { readonly: true })
     let missionName = id
     try {
-      const m = db.prepare(`SELECT name, status FROM missions WHERE id = ?`).get(id) as { name: string; status: string } | undefined
+      const m = db2.prepare(`SELECT name, status FROM missions WHERE id = ?`).get(id) as { name: string; status: string } | undefined
       if (!m) return { content: [{ type: "text", text: `Mission \`${id}\` not found.` }] }
       if (m.status === "done") return { content: [{ type: "text", text: `Mission "${m.name}" is already done.` }] }
       missionName = m.name
     } finally {
-      db.close()
+      db2.close()
     }
 
     // Call the non-SSE trigger endpoint
@@ -806,7 +1163,7 @@ server.tool(
       result.nextRole ? `**Next role:** ${result.nextRole} — run mc_run_mission again to continue` : "",
       result.tokensUsed ? `**Tokens used:** ${(result.tokensUsed as number).toLocaleString()}` : "",
       (result.questions as string[])?.length > 0
-        ? `\n⚠ **Agent has questions:**\n${(result.questions as string[]).map((q: string) => `- ${q}`).join("\n")}\nUse mc_get_questions to answer them.`
+        ? `\n⚠ **Agent has questions:**\n${(result.questions as string[]).map((q: string) => `- ${q}`).join("\n")}\nAnswer via web UI or mc_answer_question (built-in mode).`
         : "",
       ``,
       `View full output: ${appUrl}/missions/${id}`,

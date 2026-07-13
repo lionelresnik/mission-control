@@ -106,6 +106,9 @@ export default function MissionDetailPage() {
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [executionMode, setExecutionMode] = useState<"cursor" | "builtin">("cursor")
+  const [activity, setActivity] = useState<Array<{ roleName: string | null; type: string; message: string | null; createdAt: string | null }>>([])
+  const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({})
   const streamRef = useRef<ReadableStreamDefaultReader | null>(null)
 
   // Auto-scroll log to bottom
@@ -196,6 +199,37 @@ export default function MissionDetailPage() {
   }, [id, router, activeArtifactId])
 
   useEffect(() => { loadMission() }, [loadMission])
+
+  useEffect(() => {
+    fetch("/api/settings/execution-mode")
+      .then(r => r.json())
+      .then(d => setExecutionMode(d.executionMode === "builtin" ? "builtin" : "cursor"))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (executionMode !== "cursor" || !id) return
+    const poll = () =>
+      fetch(`/api/missions/${id}/activity`)
+        .then(r => r.json())
+        .then(data => { if (Array.isArray(data)) setActivity(data) })
+        .catch(() => {})
+    poll()
+    const timer = setInterval(poll, 4000)
+    return () => clearInterval(timer)
+  }, [executionMode, id, mission?.updatedAt])
+
+  async function submitAnswer(questionId: string) {
+    const answer = answerDrafts[questionId]?.trim()
+    if (!answer) return
+    await fetch(`/api/questions/${questionId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answer }),
+    })
+    setAnswerDrafts(prev => ({ ...prev, [questionId]: "" }))
+    loadMission()
+  }
 
   // ─── Run next role ─────────────────────────────────────────────────────────
 
@@ -328,7 +362,8 @@ export default function MissionDetailPage() {
   if (!mission) return null
 
   const sb = statusBadge[mission.status] ?? statusBadge.pending
-  const canRun = mission.status !== "done" && mission.status !== "failed" && !running
+  const canRun = executionMode === "builtin" && mission.status !== "done" && mission.status !== "failed" && !running
+  const cursorMode = executionMode === "cursor"
   const taskGraph = mission.taskGraph ?? []
   const artifacts = mission.artifacts ?? []
   const questions = mission.questions ?? []
@@ -409,6 +444,21 @@ export default function MissionDetailPage() {
                 }
               </Button>
             )}
+            {cursorMode && mission.status !== "done" && mission.status !== "failed" && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(id)
+                  setCopied(true)
+                  setTimeout(() => setCopied(false), 2000)
+                }}
+              >
+                {copied ? <Check className="h-4 w-4" /> : <Terminal className="h-4 w-4" />}
+                {copied ? "Copied ID" : "Continue in Cursor"}
+              </Button>
+            )}
             {mission.status === "done" && (
               <Badge variant="success" className="h-9 px-4 text-sm">Mission complete</Badge>
             )}
@@ -427,8 +477,8 @@ export default function MissionDetailPage() {
           </span>
         </div>
 
-        {/* Token usage */}
-        {((mission.tokensInput ?? 0) + (mission.tokensOutput ?? 0)) > 0 && (
+        {/* Token usage — built-in mode only */}
+        {!cursorMode && ((mission.tokensInput ?? 0) + (mission.tokensOutput ?? 0)) > 0 && (
           <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
             <span>
               <span className="text-foreground/70 font-medium">{((mission.tokensInput ?? 0) + (mission.tokensOutput ?? 0)).toLocaleString()}</span> tokens
@@ -440,6 +490,18 @@ export default function MissionDetailPage() {
                 ~<span className="text-foreground/70 font-medium">${(mission.estimatedCostUsd ?? 0).toFixed(4)}</span>
               </span>
             )}
+          </div>
+        )}
+
+        {cursorMode && activity.length > 0 && (
+          <div className="mt-3 rounded-md border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs space-y-1 max-h-24 overflow-y-auto">
+            <p className="font-medium text-blue-400">Activity (Cursor)</p>
+            {activity.slice(-6).map((ev, i) => (
+              <p key={i} className="text-muted-foreground">
+                <span className="text-foreground/80">{ev.roleName ?? "—"}</span>
+                {" · "}{ev.type}{ev.message ? `: ${ev.message.slice(0, 80)}` : ""}
+              </p>
+            ))}
           </div>
         )}
       </div>
@@ -534,10 +596,22 @@ export default function MissionDetailPage() {
                     <div key={q.id} className="rounded-md bg-muted/50 p-2 text-xs">
                       <p className="text-muted-foreground font-medium">{q.roleName}</p>
                       <p className="mt-0.5">{q.question}</p>
-                      {q.answer
-                        ? <p className="mt-1 text-green-400">→ {q.answer}</p>
-                        : <p className="mt-1 text-yellow-400/70">Unanswered</p>
-                      }
+                      {q.answer ? (
+                        <p className="mt-1 text-green-400">→ {q.answer}</p>
+                      ) : executionMode === "builtin" ? (
+                        <div className="mt-2 flex gap-1">
+                          <input
+                            className="flex-1 rounded border border-border bg-background px-2 py-1 text-xs"
+                            placeholder="Your answer…"
+                            value={answerDrafts[q.id] ?? ""}
+                            onChange={e => setAnswerDrafts(prev => ({ ...prev, [q.id]: e.target.value }))}
+                            onKeyDown={e => e.key === "Enter" && submitAnswer(q.id)}
+                          />
+                          <Button size="sm" className="h-7 text-xs" onClick={() => submitAnswer(q.id)}>Save</Button>
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-yellow-400/70">Answer in Cursor chat</p>
+                      )}
                     </div>
                   ))}
                 </div>
