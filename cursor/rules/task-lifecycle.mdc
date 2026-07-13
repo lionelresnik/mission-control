@@ -1,0 +1,35 @@
+---
+description: Todo and task lifecycle management via @lu and ~/.mission-control/todos/
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# Task Lifecycle Rule
+
+Todos live in `~/.mission-control/todos/current.md`.
+
+## Format
+
+```markdown
+- [ ] [HIGH] Fix auth token refresh loop — TICKET-891 — 2026-07-12
+- [ ] [MED] Update AGENTS.md for billing service — 2026-07-12
+- [x] [HIGH] Deploy Azure registry hotfix — 2026-07-11
+```
+
+## Lifecycle
+
+1. **Add** — `@lu todo add <text>` or write directly. Always include priority and date.
+2. **In progress** — change `[ ]` to `[~]` when starting. Lucius will show `[~]` items in status.
+3. **Done** — change to `[x]`. Move to `~/.mission-control/todos/done-YYYY-MM.md` weekly.
+
+## Priority guide
+- **HIGH** — blocks a mission, team, or deployment
+- **MED** — important but not blocking
+- **LOW** — nice to have, can wait
+
+## Ticket tagging
+Always include the ticket ID if one exists. Format: `PROJ-NNN`
+
+## Lucius integration
+- `@lu todo list` — shows all pending + in-progress items
+- `@lu status` — shows top 3 high priority todos

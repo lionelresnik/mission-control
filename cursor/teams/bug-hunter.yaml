@@ -1,0 +1,27 @@
+id: bug-hunter
+name: Bug Hunter
+description: Rapid bug investigation and fix — no ceremonies, fast loop
+is_built_in: true
+
+leader: architect
+members:
+  - role: architect
+    order: 1
+  - role: backend
+    order: 2
+  - role: qa
+    order: 3
+
+workflow:
+  - investigate  # Architect diagnoses root cause
+  - fix          # Backend implements targeted fix
+  - verify       # QA confirms fix, runs regression
+
+knowledge_filters:
+  - architecture
+  - database
+  - logs
+  - services
+
+mcps:
+  - github

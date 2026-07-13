@@ -1,0 +1,32 @@
+id: backend-crew
+name: Backend Crew
+description: Full backend feature development with security and QA review
+is_built_in: false
+
+leader: architect
+members:
+  - role: architect
+    order: 1
+  - role: backend
+    order: 2
+  - role: qa
+    order: 3
+  - role: security
+    order: 4
+
+workflow:
+  - plan        # Architect reads goal + codebase, produces plan artifact
+  - implement   # Backend implements per plan
+  - test        # QA reviews + writes/runs tests
+  - audit       # Security reviews for vulnerabilities
+  - review      # Human reviews all artifacts before merge
+
+knowledge_filters:
+  - architecture
+  - patterns
+  - database
+  - standards
+
+mcps:
+  - github
+  - jira

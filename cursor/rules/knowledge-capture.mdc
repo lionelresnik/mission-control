@@ -1,0 +1,51 @@
+---
+description: Capture engineering knowledge to ~/.mission-control/docs/ during work sessions
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# Knowledge Capture Rule
+
+When you discover something worth remembering during a session — a connection string, service dependency, architecture pattern, deployment command — capture it immediately.
+
+## Where to save
+
+```
+~/.mission-control/docs/
+  architecture/   — system design, service maps, ADRs
+  services/       — service-specific facts (ports, owners, env vars)
+  infrastructure/ — cloud resources, ARNs, connection strings, VPCs
+  patterns/       — reusable code patterns and conventions
+  runbooks/       — operational procedures (connect, deploy, debug)
+  database/       — schema facts, connection patterns, migrations
+```
+
+## Format (Markdown)
+
+```markdown
+# <Topic>
+
+**Type:** architecture | pattern | database | infrastructure | services | runbook
+**Confidence:** confirmed | assumed | investigating
+**Source:** manual | mission-<id> | ticket-<id>
+**Date:** YYYY-MM-DD
+
+---
+
+<The knowledge content — be precise, include commands, IDs, and examples>
+```
+
+## When to capture
+- You find how to connect to a database or service
+- You discover the correct ARN, endpoint, or config value
+- A decision is made about architecture or patterns
+- A bug is fixed with a non-obvious root cause
+- A new service, queue, or topic is identified
+
+## Confidence levels
+- **confirmed** — verified in code or docs
+- **assumed** — inferred from behavior, not verified
+- **investigating** — still unclear, needs follow-up
+
+## From a mission
+Missions automatically log assumptions and Q&As. After a mission completes, review its questions in the dashboard and promote confirmed facts to the knowledge base with one click.

@@ -1,0 +1,38 @@
+---
+description: Automatically log daily engineering activity to ~/.mission-control/daily/
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# Daily Recap Rule
+
+At the end of a working session (or when asked with `@lu recap`), write a structured entry to:
+
+```
+~/.mission-control/daily/YYYY-MM-DD.md
+```
+
+## Format
+
+```markdown
+## YYYY-MM-DD — <workspace/project name>
+
+### Done
+- <what was completed>
+
+### In progress
+- <what was started but not finished>
+
+### Decisions made
+- <any technical decisions worth remembering>
+
+### Questions / blockers
+- <open questions or blockers>
+```
+
+## Rules
+- Always include the date in the filename AND the heading
+- Keep bullets tight — one line each
+- Note ticket IDs where relevant (e.g. "Fixed PROJ-123: auth token refresh bug")
+- If a decision was made, consider running `@lu capture` to save it to the knowledge base
+- Never duplicate an existing entry for the same date — append to it instead

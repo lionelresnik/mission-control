@@ -1,0 +1,23 @@
+{
+  "name": "mission-control-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Mission Control — exposes missions, knowledge, todos, and projects as Cursor tools",
+  "main": "dist/index.js",
+  "bin": {
+    "mc-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "better-sqlite3": "^11.10.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.3"
+  }
+}
