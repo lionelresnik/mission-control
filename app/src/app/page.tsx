@@ -99,7 +99,7 @@ export default function DashboardPage() {
       id: t.id,
       title: t.content,
       sub: t.status === "in_progress" ? "In progress" : "Pending",
-      href: "/todos",
+      href: (t as { mission?: { id: string } }).mission?.id ? `/missions/${(t as { mission: { id: string } }).mission.id}` : "/todos",
       icon: <ListTodo className="h-3.5 w-3.5 text-blue-400" />,
     })),
     ...failed.map(m => ({

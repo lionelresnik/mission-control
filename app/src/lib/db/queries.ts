@@ -219,11 +219,31 @@ export async function getTodos(status?: "pending" | "in_progress" | "done") {
   return getDb().select().from(todos).orderBy(desc(todos.createdAt))
 }
 
+export async function getTodosEnriched(status?: "pending" | "in_progress" | "done") {
+  const [rows, allMissions, allProjects] = await Promise.all([
+    getTodos(status),
+    getMissions(),
+    getProjects(),
+  ])
+  const missionById = Object.fromEntries(allMissions.map(m => [m.id, m]))
+  const projectById = Object.fromEntries(allProjects.map(p => [p.id, p]))
+  return rows.map(t => {
+    const mission = t.missionId ? missionById[t.missionId] : null
+    const project = mission?.projectId ? projectById[mission.projectId] : null
+    return {
+      ...t,
+      mission: mission ? { id: mission.id, name: mission.name } : null,
+      project: project ? { id: project.id, name: project.name, color: project.color } : null,
+    }
+  })
+}
+
 export async function createTodo(data: {
   content: string
   priority?: "high" | "medium" | "low"
   workspace?: string
   ticketTag?: string
+  missionId?: string
 }) {
   const id = nanoid()
   await getDb().insert(todos).values({ id, ...data })

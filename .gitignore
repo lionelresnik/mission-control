@@ -5,3 +5,7 @@ app/.next/
 app/out/
 *.db
 .DS_Store
+
+# Share Cursor/VS Code tasks (global gitignore hides .vscode/)
+!.vscode/
+!.vscode/tasks.json

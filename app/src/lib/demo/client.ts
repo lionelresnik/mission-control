@@ -156,7 +156,23 @@ export async function demoFetch(input: string, init?: RequestInit): Promise<Resp
     case "mcp-status":
       return jsonResponse(bundle.mcpStatus)
     case "todos":
-      return jsonResponse(bundle.todos)
+      return jsonResponse(
+        bundle.todos.map(t => {
+          const missionId = t.missionId as string | undefined
+          const mission = missionId
+            ? bundle.missions.find(m => m.id === missionId)
+            : null
+          const projectId = mission?.projectId as string | undefined
+          const project = projectId
+            ? bundle.projects.find(p => p.id === projectId)
+            : null
+          return {
+            ...t,
+            mission: mission ? { id: mission.id, name: mission.name } : null,
+            project: project ? { id: project.id, name: project.name, color: project.color } : null,
+          }
+        }),
+      )
     default:
       return jsonResponse({ error: `Demo: unknown route ${url.pathname}` }, 404)
   }

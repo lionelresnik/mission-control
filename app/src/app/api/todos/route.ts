@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getTodos, createTodo } from "@/lib/db/queries"
+import { getTodosEnriched, createTodo } from "@/lib/db/queries"
 
 export async function GET(req: NextRequest) {
   try {
     const status = req.nextUrl.searchParams.get("status") as "pending" | "in_progress" | "done" | null
-    const todos = await getTodos(status ?? undefined)
+    const todos = await getTodosEnriched(status ?? undefined)
     return NextResponse.json(todos)
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
       priority: body.priority ?? "medium",
       workspace: body.workspace,
       ticketTag: body.ticketTag,
+      missionId: body.missionId,
     })
     return NextResponse.json(todo, { status: 201 })
   } catch (e) {

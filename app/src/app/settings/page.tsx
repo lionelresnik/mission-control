@@ -14,6 +14,7 @@ const luCommands = [
   { command: "@lu open",          description: "Open dashboard in browser",                            editable: false },
   { command: "@lu new mission",   description: "Create a mission (opens dashboard form)",              editable: false },
   { command: "@lu todo add",      description: "Add a new todo",                                       editable: true },
+  { command: "@lu todo list",     description: "List open todos (pending + in progress)",              editable: false },
   { command: "@lu standup",       description: "Generate today's standup from daily log",             editable: false },
   { command: "@lu capture",       description: "Save current context to knowledge base",              editable: true },
   { command: "@lu recap",         description: "Summarize today's work to daily log",                 editable: false },
@@ -50,6 +51,8 @@ export default function SettingsPage() {
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<{ ok: boolean; stats?: Record<string, number>; error?: string } | null>(null)
   const [dragOver, setDragOver] = useState(false)
+  const [seeding, setSeeding] = useState(false)
+  const [seedResult, setSeedResult] = useState<{ ok: boolean; message?: string; error?: string } | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -81,6 +84,24 @@ export default function SettingsPage() {
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  async function handleSeedSampleData() {
+    setSeeding(true)
+    setSeedResult(null)
+    try {
+      const res = await apiFetch("/api/seed", { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) {
+        setSeedResult({ ok: false, error: data.error ?? "Seed failed" })
+      } else {
+        setSeedResult({ ok: true, message: data.message })
+      }
+    } catch (e) {
+      setSeedResult({ ok: false, error: String(e) })
+    } finally {
+      setSeeding(false)
+    }
   }
 
   async function handleImportFile(file: File) {
@@ -223,7 +244,7 @@ export default function SettingsPage() {
             <Key className="h-4 w-4 text-primary" />
             Integrations
           </CardTitle>
-          <CardDescription>GitHub PRs, Jira tickets, Slack notifications. All fire automatically when configured.</CardDescription>
+          <CardDescription>GitHub PRs, Jira tickets, Slack notifications. Auto-fire on mission complete in Built-in AI mode when configured.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
 
@@ -345,6 +366,41 @@ export default function SettingsPage() {
             </Button>
             <p className="text-[11px] text-muted-foreground">Restart Cursor after saving. Tools appear in every chat session.</p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Sample data */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Database className="h-4 w-4 text-primary" />
+            Sample data
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Load the demo workspace (Platform API, Auth Service, missions, knowledge, todos).
+            Built-in roles and crews are created automatically on first start.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 h-8 text-xs"
+            disabled={seeding}
+            onClick={handleSeedSampleData}
+          >
+            {seeding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Database className="h-3.5 w-3.5" />}
+            Load sample data
+          </Button>
+          {seedResult && (
+            <div className={`rounded-lg border px-4 py-3 text-xs ${seedResult.ok ? "border-green-500/30 bg-green-500/5" : "border-yellow-500/30 bg-yellow-500/5"}`}>
+              {seedResult.ok ? (
+                <p className="text-green-400">{seedResult.message}</p>
+              ) : (
+                <p className="text-yellow-400">{seedResult.error}</p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

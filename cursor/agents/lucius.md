@@ -45,13 +45,15 @@ Confirm: "Added: <text> [<priority>]"
 
 ### `@lu todo list`
 ```bash
-curl -s "http://localhost:3000/api/todos?status=pending" | python3 -c "
+curl -s "http://localhost:3000/api/todos" | python3 -c "
 import sys, json
-todos = json.load(sys.stdin)
+todos = [t for t in json.load(sys.stdin) if t['status'] != 'done']
 for t in todos[:10]:
-    print(f\"  [{t['priority'].upper()}] {t['content']}\")
+    tag = f\" [{t['ticketTag']}]\" if t.get('ticketTag') else ''
+    mission = f\" → {t['mission']['name']}\" if t.get('mission') else ''
+    print(f\"  [{t['priority'].upper()}] {t['content']}{tag}{mission}\")
 if not todos:
-    print('No pending todos.')
+    print('No open todos.')
 "
 ```
 

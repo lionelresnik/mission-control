@@ -281,6 +281,9 @@
       "content": "Review assumed rate-limiting knowledge entry",
       "status": "pending",
       "priority": "medium",
+      "missionId": "mission-azure-registry",
+      "ticketTag": "AUTH-429",
+      "workspace": "Core Platform",
       "createdAt": "2026-07-12T00:00:00.000Z"
     },
     {
@@ -288,6 +291,8 @@
       "content": "Record demo video for GitHub README",
       "status": "in_progress",
       "priority": "low",
+      "missionId": "mission-auth-middleware",
+      "workspace": "Core Platform",
       "createdAt": "2026-07-11T00:00:00.000Z"
     }
   ],

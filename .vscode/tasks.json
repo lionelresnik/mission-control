@@ -1,0 +1,40 @@
+{
+  "version": "2.0.0",
+  "inputs": [
+    {
+      "id": "openDashboard",
+      "type": "command",
+      "command": "simpleBrowser.show",
+      "args": ["http://localhost:3000"]
+    }
+  ],
+  "tasks": [
+    {
+      "label": "Mission Control: Open dashboard",
+      "command": "${input:openDashboard}",
+      "problemMatcher": []
+    },
+    {
+      "label": "Mission Control: dev server",
+      "type": "npm",
+      "script": "dev",
+      "path": "app/",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "typescript",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*",
+          "endsPattern": "Ready in|Local:"
+        }
+      }
+    },
+    {
+      "label": "Mission Control: dev + open in Cursor",
+      "dependsOn": ["Mission Control: dev server", "Mission Control: Open dashboard"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    }
+  ]
+}

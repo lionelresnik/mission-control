@@ -7,7 +7,9 @@ const nextConfig: NextConfig = {
   ...(isDemo ? { output: "export" as const } : {}),
   ...(repoBase ? { basePath: repoBase, assetPrefix: repoBase } : {}),
   images: { unoptimized: true },
-  devIndicators: isDemo ? false : { position: "bottom-right" },
+  // Off in dev: Next.js injects a hidden <nextjs-portal> that Cursor's embedded browser
+  // surfaces in the DOM inspector; Chrome hides it. Errors still show without the badge.
+  devIndicators: false,
 }
 
 export default nextConfig
