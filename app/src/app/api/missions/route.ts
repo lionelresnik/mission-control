@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getDb } from "@/lib/db"
+import { maybeClearSampleData } from "@/lib/db/clear-sample-data"
 import { getMissions, createMission } from "@/lib/db/queries"
 
 export async function GET(req: NextRequest) {
@@ -21,6 +23,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "projectId, projectIds, or workspaceId required" }, { status: 400 })
     }
     const mission = await createMission(body)
+    await maybeClearSampleData(getDb())
     return NextResponse.json(mission, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

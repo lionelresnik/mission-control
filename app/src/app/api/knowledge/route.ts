@@ -21,7 +21,14 @@ export async function POST(req: NextRequest) {
     if (!body.projectId && !body.workspaceId) {
       return NextResponse.json({ error: "projectId or workspaceId required" }, { status: 400 })
     }
-    const entry = await createKnowledgeEntry(body)
+    const tags = Array.isArray(body.tags) ? body.tags : []
+    if (body.sourceKind && !tags.some((t: string) => t.startsWith("kind:"))) {
+      tags.push(`kind:${body.sourceKind}`)
+    }
+    if (body.format && !tags.some((t: string) => t.startsWith("format:"))) {
+      tags.push(`format:${body.format}`)
+    }
+    const entry = await createKnowledgeEntry({ ...body, tags })
     // Fire-and-forget embedding (no API key = silently skipped)
     if (entry) embedKnowledgeEntry(entry.id, entry.title, entry.content).catch(() => {})
     return NextResponse.json(entry, { status: 201 })

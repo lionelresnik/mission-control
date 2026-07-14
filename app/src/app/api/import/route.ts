@@ -3,6 +3,13 @@ import { getDb } from "@/lib/db"
 import {
   projects, roles, teams, knowledgeEntries, settings, todos,
 } from "@/lib/db/schema"
+import {
+  ccImportTotal,
+  importCommandCenterExport,
+  isCommandCenterExport,
+  type CcImportStats,
+} from "@/lib/import/command-center-export"
+import { clearSampleData, hasSampleData, type ClearSampleResult } from "@/lib/db/clear-sample-data"
 import { eq } from "drizzle-orm"
 import * as yaml from "js-yaml"
 import JSZip from "jszip"
@@ -108,16 +115,37 @@ function parseYamlDocs(content: string): Record<string, unknown>[] {
 
 export async function POST(req: NextRequest) {
   const db = getDb()
-  const stats = { roles: 0, teams: 0, knowledge: 0, projects: 0, settings: 0, todos: 0, errors: [] as string[] }
+  const stats = {
+    roles: 0,
+    teams: 0,
+    knowledge: 0,
+    projects: 0,
+    settings: 0,
+    todos: 0,
+    workspaces: 0,
+    profile: 0,
+    standups: 0,
+    errors: [] as string[],
+  }
+  let format: "mission-control" | "command-center-export" | null = null
+  let removeSample = true
+  let sampleCleared: ClearSampleResult | null = null
+
+  async function clearSampleIfRequested() {
+    if (!removeSample || !(await hasSampleData(db))) return
+    sampleCleared = await clearSampleData(db)
+  }
 
   try {
     const contentType = req.headers.get("content-type") ?? ""
+    removeSample = req.nextUrl.searchParams.get("removeSample") !== "false"
 
     // ── Multipart (file upload) ──────────────────────────────────────────────
     if (contentType.includes("multipart/form-data")) {
       const form = await req.formData()
       const file = form.get("file") as File | null
       if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 })
+      if (form.get("removeSample") === "false") removeSample = false
 
       const buffer = Buffer.from(await file.arrayBuffer())
       const name = file.name.toLowerCase()
@@ -156,7 +184,8 @@ export async function POST(req: NextRequest) {
         if (bundleFile) {
           const content = await bundleFile.async("string")
           const bundle = JSON.parse(content)
-          await importBundle(db, bundle, stats)
+          await clearSampleIfRequested()
+          format = await importJsonBundle(db, bundle, stats)
         }
 
       } else if (name.endsWith(".yaml") || name.endsWith(".yml")) {
@@ -180,7 +209,8 @@ export async function POST(req: NextRequest) {
 
       } else if (name.endsWith(".json")) {
         const bundle = JSON.parse(buffer.toString("utf-8"))
-        await importBundle(db, bundle, stats)
+        await clearSampleIfRequested()
+        format = await importJsonBundle(db, bundle, stats)
       } else {
         return NextResponse.json({ error: "Unsupported file type. Use .json, .yaml, or .zip" }, { status: 400 })
       }
@@ -188,17 +218,60 @@ export async function POST(req: NextRequest) {
     } else {
       // ── JSON body (API usage) ─────────────────────────────────────────────
       const bundle = await req.json()
-      await importBundle(db, bundle, stats)
+      await clearSampleIfRequested()
+      format = await importJsonBundle(db, bundle as Record<string, unknown>, stats)
     }
 
   } catch (e) {
     stats.errors.push(String(e))
   }
 
-  return NextResponse.json({ ok: true, stats })
+  const mcTotal =
+    stats.roles + stats.teams + stats.knowledge + stats.projects + stats.settings + stats.todos
+  const totalImported =
+    format === "command-center-export" ? ccImportTotal(stats as CcImportStats) : mcTotal
+
+  return NextResponse.json({
+    ok: stats.errors.length === 0 && (totalImported > 0 || (sampleCleared?.cleared ?? false)),
+    format,
+    stats,
+    sampleCleared,
+    ...(totalImported === 0 && stats.errors.length === 0
+      ? {
+          warning:
+            format === "command-center-export"
+              ? "File parsed but nothing new was imported (all items may already exist)."
+              : "No recognizable Mission Control or Command Center export data found in this file.",
+        }
+      : {}),
+  })
 }
 
-// ─── Bundle importer (v2 JSON format) ────────────────────────────────────────
+async function importJsonBundle(
+  db: ReturnType<typeof getDb>,
+  bundle: Record<string, unknown>,
+  stats: {
+    roles: number
+    teams: number
+    knowledge: number
+    projects: number
+    settings: number
+    todos: number
+    workspaces: number
+    profile: number
+    standups: number
+    errors: string[]
+  }
+): Promise<"mission-control" | "command-center-export"> {
+  if (isCommandCenterExport(bundle)) {
+    await importCommandCenterExport(db, bundle, stats as CcImportStats)
+    return "command-center-export"
+  }
+  await importBundle(db, bundle, stats)
+  return "mission-control"
+}
+
+// ─── Bundle importer (Mission Control JSON export) ────────────────────────────
 
 async function importBundle(
   db: ReturnType<typeof getDb>,

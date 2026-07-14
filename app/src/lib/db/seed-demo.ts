@@ -1,6 +1,7 @@
 import { count, eq } from "drizzle-orm"
 import { nanoid } from "nanoid"
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3"
+import { saveSampleDataMarkers } from "./clear-sample-data"
 import * as schema from "./schema"
 
 const {
@@ -463,6 +464,14 @@ export async function seedDemoData(db: AppDb): Promise<{ message: string }> {
       { key: "geminiApiKey", value: "" },
     ])
   }
+
+  await saveSampleDataMarkers(db, {
+    workspaceIds: [ws1id],
+    projectIds: [p1id, p2id, p3id],
+    missionIds: [m1id, m2id, m3id],
+    todoIds: [],
+    knowledgeIds: [],
+  })
 
   return {
     message: "Seeded sample workspace: 5 roles, 2 crews, 1 workspace, 3 projects, 3 missions, 6 knowledge entries, 2 todos, artifacts, questions, and activity events",

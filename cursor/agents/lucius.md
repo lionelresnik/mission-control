@@ -88,17 +88,31 @@ Write to `~/.mission-control/daily/YYYY-MM-DD.md`:
 Save the current context as a knowledge entry in the DB.
 Ask for:
 - Title (short)
-- Type: architecture / pattern / database / infrastructure / services / logs / runbook / adr / standard / other
+- **Source kind**: `task` / `doc` / `infra` / `architecture` / `standup` / `other` (for UI filtering)
+- **Type**: architecture / pattern / database / infrastructure / services / logs / runbook / adr / standard / other
 - Confidence: confirmed / assumed
-- Project — fetch from `curl -s http://localhost:3000/api/projects`
+- **Project or workspace** — fetch projects: `curl -s http://localhost:3000/api/projects` and workspaces: `curl -s http://localhost:3000/api/workspaces`
 
-Then:
+Prefer **`mc_add_knowledge`** (MCP) when connected — it auto-tags `kind:` and `format:` for rendering.
+
+Or POST to the API:
 ```bash
 curl -s -X POST http://localhost:3000/api/knowledge \
   -H "Content-Type: application/json" \
-  -d '{"title": "<title>", "content": "<content>", "type": "<type>", "confidence": "<confidence>", "projectId": "<projectId>"}'
+  -d '{
+    "title": "<title>",
+    "content": "<markdown or html content>",
+    "type": "<type>",
+    "sourceKind": "<task|doc|infra|architecture>",
+    "format": "markdown",
+    "confidence": "confirmed",
+    "projectId": "<projectId>",
+    "tags": ["cursor-capture"]
+  }'
 ```
-Confirm: "Captured: <title> → Knowledge Base"
+For HTML architecture graphs, set `"format": "html"` and `"sourceKind": "architecture"`.
+
+Confirm: "Captured: <title> → Knowledge Base (<kind> / <type>)"
 
 ### `@lu search <query>`
 First try semantic search:

@@ -38,7 +38,10 @@ interface Project {
   repoPath: string | null
   agentsMdStatus: string | null
   agentsMdLocal: string | null
+  workspaceId: string | null
 }
+
+type Workspace = { id: string; name: string; color: string }
 
 interface AgentsMdResponse {
   content: string
@@ -88,6 +91,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>()
   const [project, setProject] = useState<Project | null>(null)
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [content, setContent] = useState("")
   const [originalContent, setOriginalContent] = useState("")
   const [source, setSource] = useState<AgentsMdResponse["source"]>("template")
@@ -97,11 +101,13 @@ export default function ProjectDetailPage() {
 
   const loadData = useCallback(async () => {
     setLoading(true)
-    const [projRes, agentsRes] = await Promise.all([
+    const [projRes, agentsRes, wsRes] = await Promise.all([
       apiFetch(`/api/projects/${params.id}`),
       apiFetch(`/api/projects/${params.id}/agents-md`),
+      apiFetch("/api/workspaces"),
     ])
     if (projRes.ok) setProject(await projRes.json())
+    if (wsRes.ok) setWorkspaces(await wsRes.json())
     if (agentsRes.ok) {
       const data: AgentsMdResponse = await agentsRes.json()
       setContent(data.content)
@@ -143,6 +149,7 @@ export default function ProjectDetailPage() {
   const [settingsForm, setSettingsForm] = useState({
     name: "", description: "", githubOwner: "", githubRepo: "",
     jiraUrl: "", jiraProject: "", slackChannel: "", repoPath: "", color: "",
+    workspaceId: "",
   })
   const [settingsSaveState, setSettingsSaveState] = useState<SaveState>("idle")
 
@@ -158,6 +165,7 @@ export default function ProjectDetailPage() {
         slackChannel: project.slackChannel ?? "",
         repoPath: project.repoPath ?? "",
         color: project.color ?? "#6b7280",
+        workspaceId: project.workspaceId ?? "",
       })
     }
   }, [project])
@@ -167,7 +175,10 @@ export default function ProjectDetailPage() {
     const res = await apiFetch(`/api/projects/${params.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(settingsForm),
+      body: JSON.stringify({
+        ...settingsForm,
+        workspaceId: settingsForm.workspaceId || null,
+      }),
     })
     if (res.ok) {
       const updated = await res.json()
@@ -333,6 +344,18 @@ export default function ProjectDetailPage() {
                 </Field>
                 <Field label="Description">
                   <Input value={settingsForm.description} onChange={e => setSettingsForm(f => ({ ...f, description: e.target.value }))} placeholder="Short description" />
+                </Field>
+                <Field label="Workspace" hint="Move this project to another workspace, or leave unassigned">
+                  <select
+                    value={settingsForm.workspaceId}
+                    onChange={e => setSettingsForm(f => ({ ...f, workspaceId: e.target.value }))}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">Unassigned</option>
+                    {workspaces.map(w => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
                 </Field>
                 <Field label="Color">
                   <div className="flex items-center gap-2">

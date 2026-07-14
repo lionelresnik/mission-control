@@ -35,6 +35,7 @@ export async function createProject(data: {
   githubOwner?: string
   jiraProject?: string
   slackChannel?: string
+  workspaceId?: string
 }) {
   const id = nanoid()
   await getDb().insert(projects).values({ id, ...data })
@@ -179,6 +180,7 @@ export async function createKnowledgeEntry(data: {
   content: string
   confidence?: "confirmed" | "assumed" | "investigating"
   sourceMissionId?: string
+  sourceFile?: string
   tags?: string[]
 }) {
   if (!data.projectId && !data.workspaceId) {

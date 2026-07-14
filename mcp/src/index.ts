@@ -470,45 +470,106 @@ server.tool(
 
 server.tool(
   "mc_add_knowledge",
-  "Add a new entry to the knowledge base.",
+  "Add a new entry to the knowledge base. Tag with sourceKind (task/doc/infra/architecture) for filtering in the UI.",
   {
-    projectId: z.string().describe("Project ID to attach this knowledge to"),
+    projectId: z.string().optional().describe("Project ID — use mc_list_projects. Required unless workspaceId is set."),
+    workspaceId: z.string().optional().describe("Workspace ID for workspace-wide docs — use when no project applies."),
     title: z.string().describe("Short descriptive title"),
-    content: z.string().describe("Full knowledge content"),
+    content: z.string().describe("Full knowledge content (markdown or HTML)"),
     type: z.enum(["architecture", "pattern", "adr", "standard", "glossary", "database", "infrastructure", "logs", "services", "runbook", "other"])
       .describe("Entry type"),
+    sourceKind: z.enum(["task", "doc", "infra", "standup", "architecture", "other"]).optional()
+      .describe("Source category for UI filters. Defaults from type."),
+    format: z.enum(["markdown", "html", "text"]).optional().describe("Content format hint for rendering"),
     confidence: z.enum(["confirmed", "assumed", "investigating"]).optional().describe("Confidence level. Defaults to confirmed."),
-    tags: z.array(z.string()).optional().describe("Tags for filtering"),
+    tags: z.array(z.string()).optional().describe("Extra tags for filtering"),
+    sourceFile: z.string().optional().describe("Original file path, e.g. docs/supply-chain/runbook.md"),
   },
-  async ({ projectId, title, content, type, confidence = "confirmed", tags = [] }) => {
+  async ({ projectId, workspaceId, title, content, type, sourceKind, format, confidence = "confirmed", tags = [], sourceFile }) => {
+    if (!projectId && !workspaceId) {
+      return { content: [{ type: "text", text: "Provide projectId or workspaceId. Use mc_list_projects / mc_list_workspaces." }] }
+    }
     if (!fs.existsSync(DB_PATH)) {
       return { content: [{ type: "text", text: `Database not found at ${DB_PATH}` }] }
     }
     const db = new Database(DB_PATH)
     try {
-      const project = db.prepare(`SELECT name FROM projects WHERE id = ?`).get(projectId) as { name: string } | undefined
-      if (!project) {
-        const projects = db.prepare(`SELECT id, name FROM projects ORDER BY name`).all() as Array<{ id: string; name: string }>
-        return {
-          content: [{
-            type: "text",
-            text: `Project \`${projectId}\` not found.\n\nAvailable projects:\n` +
-              projects.map(p => `- \`${p.id}\` — ${p.name}`).join("\n"),
-          }]
+      if (projectId) {
+        const project = db.prepare(`SELECT name FROM projects WHERE id = ?`).get(projectId) as { name: string } | undefined
+        if (!project) {
+          const projects = db.prepare(`SELECT id, name FROM projects ORDER BY name`).all() as Array<{ id: string; name: string }>
+          return {
+            content: [{
+              type: "text",
+              text: `Project \`${projectId}\` not found.\n\nAvailable projects:\n` +
+                projects.map(p => `- \`${p.id}\` — ${p.name}`).join("\n"),
+            }]
+          }
         }
       }
 
+      const kind = sourceKind ?? (type === "architecture" ? "architecture" : type === "infrastructure" || type === "database" || type === "logs" ? "infra" : "doc")
+      const fmt = format ?? (content.trimStart().startsWith("<!DOCTYPE") || content.trimStart().startsWith("<html") ? "html" : "markdown")
+      const allTags = [...tags]
+      if (!allTags.some(t => t.startsWith("kind:"))) allTags.push(`kind:${kind}`)
+      if (!allTags.some(t => t.startsWith("format:"))) allTags.push(`format:${fmt}`)
+
       const id = `kb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
       db.prepare(
-        `INSERT INTO knowledge_entries (id, project_id, type, title, content, confidence, tags, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
-      ).run(id, projectId, type, title, content, confidence, JSON.stringify(tags))
+        `INSERT INTO knowledge_entries (id, project_id, workspace_id, type, title, content, confidence, tags, source_file, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+      ).run(id, projectId ?? null, workspaceId ?? null, type, title, content, confidence, JSON.stringify(allTags), sourceFile ?? null)
 
       return {
         content: [{
           type: "text",
-          text: `✅ Knowledge entry added (id: \`${id}\`)\n**${title}**\nProject: ${project.name}  |  Type: ${type}  |  Confidence: ${confidence}`,
+          text: `✅ Knowledge entry added (id: \`${id}\`)\n**${title}**\nKind: ${kind}  |  Type: ${type}  |  Format: ${fmt}  |  Confidence: ${confidence}`,
         }]
+      }
+    } finally {
+      db.close()
+    }
+  }
+)
+
+// ─── Tool: mc_move_knowledge ──────────────────────────────────────────────────
+
+server.tool(
+  "mc_move_knowledge",
+  "Move a knowledge entry to a different project or workspace. Clears the other placement field automatically.",
+  {
+    id: z.string().describe("Knowledge entry ID"),
+    scope: z.enum(["project", "workspace"]).describe("Whether the entry belongs to a project or a workspace"),
+    projectId: z.string().optional().describe("Target project ID when scope is project"),
+    workspaceId: z.string().optional().describe("Target workspace ID when scope is workspace"),
+  },
+  async ({ id, scope, projectId, workspaceId }) => {
+    if (scope === "project" && !projectId) {
+      return { content: [{ type: "text", text: "projectId required when scope is project" }] }
+    }
+    if (scope === "workspace" && !workspaceId) {
+      return { content: [{ type: "text", text: "workspaceId required when scope is workspace" }] }
+    }
+    if (!fs.existsSync(DB_PATH)) {
+      return { content: [{ type: "text", text: `Database not found at ${DB_PATH}` }] }
+    }
+    const db = new Database(DB_PATH)
+    try {
+      const row = db.prepare(`SELECT id, title FROM knowledge_entries WHERE id = ?`).get(id) as { id: string; title: string } | undefined
+      if (!row) {
+        return { content: [{ type: "text", text: `Knowledge entry \`${id}\` not found.` }] }
+      }
+      const nextProjectId = scope === "project" ? projectId! : null
+      const nextWorkspaceId = scope === "workspace" ? workspaceId! : null
+      db.prepare(
+        `UPDATE knowledge_entries SET project_id = ?, workspace_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+      ).run(nextProjectId, nextWorkspaceId, id)
+      const target = scope === "project" ? `project \`${projectId}\`` : `workspace \`${workspaceId}\``
+      return {
+        content: [{
+          type: "text",
+          text: `✅ Moved **${row.title}** (\`${id}\`) to ${target}`,
+        }],
       }
     } finally {
       db.close()

@@ -49,10 +49,20 @@ export default function SettingsPage() {
 
   // Import/export state
   const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState<{ ok: boolean; stats?: Record<string, number>; error?: string } | null>(null)
+  const [importResult, setImportResult] = useState<{
+    ok: boolean
+    format?: string
+    warning?: string
+    stats?: Record<string, number>
+    sampleCleared?: { cleared: boolean; workspaces: number; projects: number; missions: number }
+    error?: string
+  } | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [seeding, setSeeding] = useState(false)
   const [seedResult, setSeedResult] = useState<{ ok: boolean; message?: string; error?: string } | null>(null)
+  const [clearingSample, setClearingSample] = useState(false)
+  const [clearSampleResult, setClearSampleResult] = useState<{ ok: boolean; message?: string; error?: string } | null>(null)
+  const [removeSampleOnImport, setRemoveSampleOnImport] = useState(true)
 
   useEffect(() => {
     Promise.all([
@@ -104,12 +114,31 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleClearSampleData() {
+    setClearingSample(true)
+    setClearSampleResult(null)
+    try {
+      const res = await apiFetch("/api/seed", { method: "DELETE" })
+      const data = await res.json()
+      if (!res.ok) {
+        setClearSampleResult({ ok: false, error: data.error ?? "Failed to remove sample data" })
+      } else {
+        setClearSampleResult({ ok: true, message: data.message })
+      }
+    } catch (e) {
+      setClearSampleResult({ ok: false, error: String(e) })
+    } finally {
+      setClearingSample(false)
+    }
+  }
+
   async function handleImportFile(file: File) {
     setImporting(true)
     setImportResult(null)
     try {
       const form = new FormData()
       form.append("file", file)
+      if (!removeSampleOnImport) form.append("removeSample", "false")
       const res = await apiFetch("/api/import", { method: "POST", body: form })
       const data = await res.json()
       setImportResult(data)
@@ -377,27 +406,47 @@ export default function SettingsPage() {
             Sample data
           </CardTitle>
           <CardDescription className="text-xs">
-            Load the demo workspace (Platform API, Auth Service, missions, knowledge, todos).
-            Built-in roles and crews are created automatically on first start.
+            Optional demo workspace (Platform API, Auth Service, sample missions). Built-in roles and default crews are always kept.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2 h-8 text-xs"
-            disabled={seeding}
-            onClick={handleSeedSampleData}
-          >
-            {seeding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Database className="h-3.5 w-3.5" />}
-            Load sample data
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 h-8 text-xs"
+              disabled={seeding}
+              onClick={handleSeedSampleData}
+            >
+              {seeding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Database className="h-3.5 w-3.5" />}
+              Load sample data
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 h-8 text-xs"
+              disabled={clearingSample}
+              onClick={handleClearSampleData}
+            >
+              {clearingSample ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Database className="h-3.5 w-3.5" />}
+              Remove sample data
+            </Button>
+          </div>
           {seedResult && (
             <div className={`rounded-lg border px-4 py-3 text-xs ${seedResult.ok ? "border-green-500/30 bg-green-500/5" : "border-yellow-500/30 bg-yellow-500/5"}`}>
               {seedResult.ok ? (
                 <p className="text-green-400">{seedResult.message}</p>
               ) : (
                 <p className="text-yellow-400">{seedResult.error}</p>
+              )}
+            </div>
+          )}
+          {clearSampleResult && (
+            <div className={`rounded-lg border px-4 py-3 text-xs ${clearSampleResult.ok ? "border-green-500/30 bg-green-500/5" : "border-yellow-500/30 bg-yellow-500/5"}`}>
+              {clearSampleResult.ok ? (
+                <p className="text-green-400">{clearSampleResult.message}</p>
+              ) : (
+                <p className="text-yellow-400">{clearSampleResult.error}</p>
               )}
             </div>
           )}
@@ -466,6 +515,18 @@ export default function SettingsPage() {
           {/* Import */}
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Import</p>
+            <label className="flex items-start gap-2 text-xs text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={removeSampleOnImport}
+                onChange={e => setRemoveSampleOnImport(e.target.checked)}
+              />
+              <span>
+                Remove sample workspace first (Platform API, Auth Service, demo missions).
+                Built-in roles and default crews are kept.
+              </span>
+            </label>
             <div
               className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-8 transition-colors cursor-pointer ${
                 dragOver ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
@@ -504,30 +565,51 @@ export default function SettingsPage() {
                   <div className="space-y-1">
                     <p className="font-medium text-green-400 flex items-center gap-1.5">
                       <CheckCircle2 className="h-3.5 w-3.5" /> Import complete
+                      {importResult.format === "command-center-export" && (
+                        <span className="text-muted-foreground font-normal">(Command Center export)</span>
+                      )}
                     </p>
                     {importResult.stats && (
                       <div className="flex flex-wrap gap-3 text-muted-foreground mt-1">
-                        {Object.entries(importResult.stats).filter(([, v]) => (v as number) > 0).map(([k, v]) => (
-                          <span key={k}><span className="font-medium text-foreground">{v as number}</span> {k}</span>
+                        {Object.entries(importResult.stats)
+                          .filter(([k, v]) => k !== "errors" && typeof v === "number" && v > 0)
+                          .map(([k, v]) => (
+                          <span key={k}><span className="font-medium text-foreground">{v as number}</span> {k.replace(/_/g, " ")}</span>
                         ))}
                       </div>
+                    )}
+                    {importResult.sampleCleared?.cleared && (
+                      <p className="text-muted-foreground mt-1">
+                        Removed sample: {importResult.sampleCleared.workspaces} workspace(s), {importResult.sampleCleared.projects} project(s), {importResult.sampleCleared.missions} mission(s).
+                      </p>
                     )}
                     <p className="text-muted-foreground/70 mt-1">Refresh the page to see imported data.</p>
                   </div>
                 ) : (
-                  <p className="text-red-400 flex items-center gap-1.5">
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    {importResult.error ?? "Import failed"}
-                  </p>
+                  <div className="space-y-1">
+                    <p className="font-medium text-red-400 flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      {importResult.warning ?? importResult.error ?? "Import failed"}
+                    </p>
+                    {importResult.stats && (
+                      <div className="flex flex-wrap gap-3 text-muted-foreground mt-1">
+                        {Object.entries(importResult.stats)
+                          .filter(([k, v]) => k !== "errors" && typeof v === "number" && v > 0)
+                          .map(([k, v]) => (
+                          <span key={k}><span className="font-medium text-foreground">{v as number}</span> {k.replace(/_/g, " ")}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}
 
             <div className="text-[11px] text-muted-foreground space-y-0.5">
-              <p>• <strong>JSON bundle</strong>: Full export from this app</p>
+              <p>• <strong>JSON bundle</strong>: Mission Control full export, or Command Center CLI export (<code>command-center-export-*.json</code>)</p>
               <p>• <strong>v1 YAML</strong>: Role or team files from the v1 CLI/plugin (<code>cursor/roles/*.yaml</code>, <code>cursor/teams/*.yaml</code>)</p>
               <p>• <strong>ZIP</strong>: Bundle containing v1 YAML files + optional JSON bundle</p>
-              <p className="text-muted-foreground/60 pt-1">Existing records are updated; new records are added. Nothing is deleted.</p>
+              <p className="text-muted-foreground/60 pt-1">Import adds data; sample workspace can be removed automatically. Roles and crews are never deleted.</p>
             </div>
           </div>
         </CardContent>

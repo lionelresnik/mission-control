@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getDb, schema } from "@/lib/db"
+import { maybeClearSampleData } from "@/lib/db/clear-sample-data"
 import { nanoid } from "nanoid"
 
 export async function GET() {
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
     const rows = await db.select().from(schema.workspaces)
     const ws = rows.find(w => w.id === id)
     const projects = await db.select().from(schema.projects)
+    await maybeClearSampleData(db)
     return NextResponse.json({ ...ws, projects: projects.filter(p => p.workspaceId === id) }, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

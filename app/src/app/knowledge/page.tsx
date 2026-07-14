@@ -1,8 +1,11 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { Brain, Plus, CheckCircle2, AlertTriangle, Search, X, Loader2, Sparkles, Zap, ChevronDown, ChevronUp, Pencil, Trash2, Check, ChevronRight, Layers } from "lucide-react"
+import { Brain, Plus, CheckCircle2, AlertTriangle, Search, X, Loader2, Sparkles, Zap, ChevronDown, ChevronUp, Pencil, Trash2, Check, ChevronRight, Layers, ArrowRightLeft } from "lucide-react"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { KnowledgeContentView } from "@/components/knowledge/content-view"
+import { sourceKindFromTags, detectContentFormat, type SourceKind } from "@/lib/knowledge/content-format"
+import { placementScopeFromEntry, type PlacementScope } from "@/lib/knowledge/placement"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -19,6 +22,25 @@ type Entry = {
   confidence: Confidence; projectId: string | null; workspaceId?: string | null
   updatedAt: string | null
   sourceMissionId: string | null; tags: string[] | null
+  sourceFile?: string | null
+}
+
+const sourceKindLabels: Record<SourceKind, string> = {
+  task: "Task",
+  doc: "Doc",
+  infra: "Infra",
+  standup: "Standup",
+  architecture: "Architecture",
+  other: "Other",
+}
+
+const sourceKindColors: Record<SourceKind, string> = {
+  task: "bg-amber-500/20 text-amber-400",
+  doc: "bg-sky-500/20 text-sky-400",
+  infra: "bg-orange-500/20 text-orange-400",
+  standup: "bg-violet-500/20 text-violet-400",
+  architecture: "bg-blue-500/20 text-blue-400",
+  other: "bg-gray-500/20 text-gray-400",
 }
 
 type Project = { id: string; name: string; color: string | null; workspaceId?: string | null }
@@ -54,6 +76,9 @@ type CardCtx = {
   editType: KnowledgeType; setEditType: (v: KnowledgeType) => void
   editConfidence: Confidence; setEditConfidence: (v: Confidence) => void
   editTags: string; setEditTags: (v: string) => void
+  editScope: PlacementScope; setEditScope: (v: PlacementScope) => void
+  editProjectId: string; setEditProjectId: (v: string) => void
+  editWorkspaceId: string; setEditWorkspaceId: (v: string) => void
   editSaving: boolean
   handleSaveEdit: (id: string) => void
   setEditingId: (id: string | null) => void
@@ -61,15 +86,43 @@ type CardCtx = {
   handleDelete: (id: string) => void
   setDeleteTarget: (e: Entry | null) => void
   handleConfirm: (id: string) => void
+  handleMove: (id: string, scope: PlacementScope, projectId: string, workspaceId: string) => Promise<void>
 }
 
 let _ctx: CardCtx | null = null
 
-function EntryCard({ entry, project }: { entry: Entry & { _score?: number | null }; project: Project | undefined }) {
+function EntryCard({
+  entry, project, projects, workspaces,
+}: {
+  entry: Entry & { _score?: number | null }
+  project: Project | undefined
+  projects: Project[]
+  workspaces: Workspace[]
+}) {
   const ctx = _ctx!
   const isExpanded = ctx.expandedId === entry.id
   const isEditing = ctx.editingId === entry.id
   const score = entry._score ?? null
+  const sourceKind = sourceKindFromTags(entry.tags)
+  const [moveScope, setMoveScope] = useState<PlacementScope>(() => placementScopeFromEntry(entry))
+  const [moveProjectId, setMoveProjectId] = useState(entry.projectId ?? projects[0]?.id ?? "")
+  const [moveWorkspaceId, setMoveWorkspaceId] = useState(entry.workspaceId ?? workspaces[0]?.id ?? "")
+  const [moving, setMoving] = useState(false)
+
+  useEffect(() => {
+    setMoveScope(placementScopeFromEntry(entry))
+    setMoveProjectId(entry.projectId ?? projects[0]?.id ?? "")
+    setMoveWorkspaceId(entry.workspaceId ?? workspaces[0]?.id ?? "")
+  }, [entry.id, entry.projectId, entry.workspaceId, projects, workspaces])
+
+  const currentScope = placementScopeFromEntry(entry)
+  const placementUnchanged =
+    moveScope === currentScope &&
+    (moveScope === "project" ? moveProjectId === entry.projectId : moveWorkspaceId === entry.workspaceId)
+
+  const workspaceName = entry.workspaceId
+    ? workspaces.find(w => w.id === entry.workspaceId)?.name
+    : undefined
 
   return (
     <Card
@@ -98,7 +151,11 @@ function EntryCard({ entry, project }: { entry: Entry & { _score?: number | null
               )}
             </div>
             {!isExpanded && (
-              <p className="text-xs text-muted-foreground font-mono line-clamp-2 whitespace-pre-wrap">{entry.content}</p>
+              <p className="text-xs text-muted-foreground line-clamp-2">
+                {detectContentFormat(entry.content, entry.sourceFile) === "html"
+                  ? entry.title
+                  : entry.content.replace(/^#+\s+/gm, "").slice(0, 160)}
+              </p>
             )}
             <div className="flex items-center gap-2 mt-1.5">
               {project && activeProjectId_ref === "all" && (
@@ -109,7 +166,7 @@ function EntryCard({ entry, project }: { entry: Entry & { _score?: number | null
               )}
               {!project && entry.workspaceId && (
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Layers className="h-3 w-3" /> Workspace-wide
+                  <Layers className="h-3 w-3" /> {workspaceName ?? "Workspace-wide"}
                 </span>
               )}
               {entry.sourceMissionId && <span className="text-xs text-muted-foreground">· from mission</span>}
@@ -151,6 +208,11 @@ function EntryCard({ entry, project }: { entry: Entry & { _score?: number | null
               </>
             ) : (
               <>
+                {sourceKind && (
+                  <span className={cn("rounded px-2 py-0.5 text-xs font-medium", sourceKindColors[sourceKind])}>
+                    {sourceKindLabels[sourceKind]}
+                  </span>
+                )}
                 <span className={cn("rounded px-2 py-0.5 text-xs font-medium", typeColors[entry.type])}>{entry.type}</span>
                 {entry.confidence === "assumed" && (
                   <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => ctx.handleConfirm(entry.id)}>
@@ -202,11 +264,85 @@ function EntryCard({ entry, project }: { entry: Entry & { _score?: number | null
                     </div>
                   )}
                 </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-[11px] text-muted-foreground">Location</label>
+                  <select
+                    value={ctx.editScope}
+                    onChange={e => ctx.setEditScope(e.target.value as PlacementScope)}
+                    className="h-7 rounded border border-input bg-background px-2 text-xs"
+                  >
+                    <option value="project">Project</option>
+                    <option value="workspace">Workspace</option>
+                  </select>
+                  {ctx.editScope === "project" ? (
+                    <select
+                      value={ctx.editProjectId}
+                      onChange={e => ctx.setEditProjectId(e.target.value)}
+                      className="h-7 flex-1 min-w-[140px] rounded border border-input bg-background px-2 text-xs"
+                    >
+                      {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  ) : (
+                    <select
+                      value={ctx.editWorkspaceId}
+                      onChange={e => ctx.setEditWorkspaceId(e.target.value)}
+                      className="h-7 flex-1 min-w-[140px] rounded border border-input bg-background px-2 text-xs"
+                    >
+                      {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                    </select>
+                  )}
+                </div>
               </>
             ) : (
-              <pre className="text-xs text-muted-foreground font-mono whitespace-pre-wrap break-words bg-muted/30 rounded p-3 leading-relaxed">
-                {entry.content}
-              </pre>
+              <>
+                <KnowledgeContentView content={entry.content} sourceFile={entry.sourceFile} />
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/30">
+                  <ArrowRightLeft className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <span className="text-[11px] text-muted-foreground">Move to</span>
+                  <select
+                    value={moveScope}
+                    onChange={e => setMoveScope(e.target.value as PlacementScope)}
+                    className="h-7 rounded border border-input bg-background px-2 text-xs"
+                  >
+                    <option value="project">Project</option>
+                    <option value="workspace">Workspace</option>
+                  </select>
+                  {moveScope === "project" ? (
+                    <select
+                      value={moveProjectId}
+                      onChange={e => setMoveProjectId(e.target.value)}
+                      className="h-7 flex-1 min-w-[140px] rounded border border-input bg-background px-2 text-xs"
+                    >
+                      {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  ) : (
+                    <select
+                      value={moveWorkspaceId}
+                      onChange={e => setMoveWorkspaceId(e.target.value)}
+                      className="h-7 flex-1 min-w-[140px] rounded border border-input bg-background px-2 text-xs"
+                    >
+                      {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                    </select>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1"
+                    disabled={moving || placementUnchanged || (moveScope === "project" ? !moveProjectId : !moveWorkspaceId)}
+                    onClick={async () => {
+                      setMoving(true)
+                      try {
+                        await ctx.handleMove(entry.id, moveScope, moveProjectId, moveWorkspaceId)
+                      } finally {
+                        setMoving(false)
+                      }
+                    }}
+                  >
+                    {moving ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRightLeft className="h-3 w-3" />}
+                    Move
+                  </Button>
+                </div>
+              </>
             )}
             {!isEditing && entry.tags && entry.tags.length > 0 && (
               <div className="flex flex-wrap gap-1 pt-1">
@@ -233,6 +369,7 @@ export default function KnowledgePage() {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | "all">("all")
   const [search, setSearch] = useState("")
   const [filterType, setFilterType] = useState<KnowledgeType | "">("")
+  const [filterSourceKind, setFilterSourceKind] = useState<SourceKind | "">("")
   const [activeProjectId, setActiveProjectId] = useState<string | "all">("all")
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set())
   const [showAdd, setShowAdd] = useState(false)
@@ -266,6 +403,9 @@ export default function KnowledgePage() {
   const [editType, setEditType] = useState<KnowledgeType>("architecture")
   const [editConfidence, setEditConfidence] = useState<Confidence>("confirmed")
   const [editTags, setEditTags] = useState("")
+  const [editScope, setEditScope] = useState<PlacementScope>("project")
+  const [editProjectId, setEditProjectId] = useState("")
+  const [editWorkspaceId, setEditWorkspaceId] = useState("")
   const [editSaving, setEditSaving] = useState(false)
 
   const load = useCallback(async () => {
@@ -276,7 +416,6 @@ export default function KnowledgePage() {
     ])
     setEntries(e)
     setProjects(p)
-    setWorkspaces(w)
     setWorkspaces(w)
     if (p.length > 0 && !newProjectId) setNewProjectId(p[0].id)
     if (w.length > 0 && !newWorkspaceId) setNewWorkspaceId(w[0].id)
@@ -338,11 +477,12 @@ export default function KnowledgePage() {
     : entries.filter(e => {
         const matchSearch = !search || e.title.toLowerCase().includes(search.toLowerCase()) || e.content.toLowerCase().includes(search.toLowerCase())
         const matchType = !filterType || e.type === filterType
+        const matchSourceKind = !filterSourceKind || sourceKindFromTags(e.tags) === filterSourceKind
         const matchProject = activeProjectId === "all" || e.projectId === activeProjectId
         const matchWorkspace = activeWorkspaceId === "all"
           || e.workspaceId === activeWorkspaceId
           || (e.projectId != null && wsProjectIds?.has(e.projectId))
-        return matchSearch && matchType && matchProject && matchWorkspace
+        return matchSearch && matchType && matchSourceKind && matchProject && matchWorkspace
       })
 
   // Group entries by project for "all" view
@@ -399,26 +539,60 @@ export default function KnowledgePage() {
     setEditType(entry.type)
     setEditConfidence(entry.confidence)
     setEditTags((entry.tags ?? []).join(", "))
+    setEditScope(placementScopeFromEntry(entry))
+    setEditProjectId(entry.projectId ?? projects[0]?.id ?? "")
+    setEditWorkspaceId(entry.workspaceId ?? workspaces[0]?.id ?? "")
     setExpandedId(entry.id)
   }
 
   const handleSaveEdit = async (id: string) => {
     setEditSaving(true)
     const tags = editTags.split(/[,\s]+/).map(t => t.trim().replace(/^#/, "")).filter(Boolean)
+    const placement = {
+      scope: editScope,
+      projectId: editScope === "project" ? editProjectId : undefined,
+      workspaceId: editScope === "workspace" ? editWorkspaceId : undefined,
+    }
     try {
       await apiFetch(`/api/knowledge/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: editTitle, content: editContent, type: editType, confidence: editConfidence, tags }),
+        body: JSON.stringify({ title: editTitle, content: editContent, type: editType, confidence: editConfidence, tags, ...placement }),
       })
       setEntries(prev => prev.map(e => e.id === id
-        ? { ...e, title: editTitle, content: editContent, type: editType, confidence: editConfidence, tags }
+        ? {
+          ...e,
+          title: editTitle,
+          content: editContent,
+          type: editType,
+          confidence: editConfidence,
+          tags,
+          projectId: editScope === "project" ? editProjectId : null,
+          workspaceId: editScope === "workspace" ? editWorkspaceId : null,
+        }
         : e
       ))
       setEditingId(null)
     } finally {
       setEditSaving(false)
     }
+  }
+
+  const handleMove = async (id: string, scope: PlacementScope, projectId: string, workspaceId: string) => {
+    await apiFetch(`/api/knowledge/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scope,
+        projectId: scope === "project" ? projectId : undefined,
+        workspaceId: scope === "workspace" ? workspaceId : undefined,
+      }),
+    })
+    setEntries(prev => prev.map(e => e.id === id
+      ? { ...e, projectId: scope === "project" ? projectId : null, workspaceId: scope === "workspace" ? workspaceId : null }
+      : e
+    ))
+    if (expandedId === id) setExpandedId(null)
   }
 
   const handleDelete = async (id: string) => {
@@ -444,8 +618,9 @@ export default function KnowledgePage() {
     editingId, editTitle, setEditTitle, editContent, setEditContent,
     editType, setEditType, editConfidence, setEditConfidence,
     editTags, setEditTags,
+    editScope, setEditScope, editProjectId, setEditProjectId, editWorkspaceId, setEditWorkspaceId,
     editSaving, handleSaveEdit, setEditingId, startEdit,
-    handleDelete, setDeleteTarget, handleConfirm,
+    handleDelete, setDeleteTarget, handleConfirm, handleMove,
   }
 
   return (
@@ -649,11 +824,20 @@ export default function KnowledgePage() {
           />
         </div>
         {!semanticMode && (
-          <select value={filterType} onChange={e => setFilterType(e.target.value as KnowledgeType | "")}
-            className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm">
-            <option value="">All types</option>
-            {knowledgeTypes.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
+          <>
+            <select value={filterSourceKind} onChange={e => setFilterSourceKind(e.target.value as SourceKind | "")}
+              className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm">
+              <option value="">All sources</option>
+              {(Object.keys(sourceKindLabels) as SourceKind[]).map(k => (
+                <option key={k} value={k}>{sourceKindLabels[k]}</option>
+              ))}
+            </select>
+            <select value={filterType} onChange={e => setFilterType(e.target.value as KnowledgeType | "")}
+              className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm">
+              <option value="">All types</option>
+              {knowledgeTypes.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </>
         )}
         <button
           onClick={() => { setSemanticMode(v => !v); setSearch(""); setSemanticResults(null) }}
@@ -691,13 +875,13 @@ export default function KnowledgePage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {showGrouped
-            ? grouped.map(({ project, entries: groupEntries }) => {
+          {showGrouped ? (
+            <>
+              {grouped.map(({ project, entries: groupEntries }) => {
                 const isCollapsed = collapsedProjects.has(project.id)
                 const assumedCount = groupEntries.filter(e => e.confidence === "assumed").length
                 return (
                   <div key={project.id}>
-                    {/* Project section header */}
                     <button
                       className="flex items-center gap-2 w-full text-left mb-2 group"
                       onClick={() => toggleProjectCollapse(project.id)}
@@ -717,17 +901,22 @@ export default function KnowledgePage() {
                     </button>
                     {!isCollapsed && (
                       <div className="space-y-2 pl-4 border-l-2" style={{ borderColor: project.color ?? "#374151" }}>
-                        {groupEntries.map(entry => <EntryCard key={entry.id} entry={entry} project={project} />)}
+                        {groupEntries.map(entry => (
+                          <EntryCard key={entry.id} entry={entry} project={project} projects={projects} workspaces={workspaces} />
+                        ))}
                       </div>
                     )}
                   </div>
                 )
-              })
-            : filtered.map(entry => {
+              })}
+              {filtered.filter(e => !e.projectId).map(entry => (
+                <EntryCard key={entry.id} entry={entry} project={undefined} projects={projects} workspaces={workspaces} />
+              ))}
+            </>
+          ) : filtered.map(entry => {
                 const project = entry.projectId ? projectById[entry.projectId] : undefined
-                return <EntryCard key={entry.id} entry={entry} project={project} />
-              })
-          }
+                return <EntryCard key={entry.id} entry={entry} project={project} projects={projects} workspaces={workspaces} />
+              })}
         </div>
       )}
       <ConfirmDialog
